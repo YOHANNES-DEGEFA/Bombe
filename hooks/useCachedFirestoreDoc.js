@@ -2,27 +2,21 @@ import { useEffect, useState } from "react";
 import { doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { safeGetDoc } from "../lib/firestore";
+import {
+  CACHE_TTL,
+  getMemoryCached,
+  setMemoryCached,
+  deleteMemoryCached,
+} from "../lib/memoryCache";
 
-const cache = new Map();
-const DEFAULT_TTL_MS = 2 * 60 * 1000;
-
-function getCached(key) {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.timestamp > entry.ttl) {
-    cache.delete(key);
-    return null;
-  }
-  return entry.data;
-}
-
-function setCached(key, data, ttl) {
-  cache.set(key, { data, timestamp: Date.now(), ttl });
-}
-
-export function useCachedFirestoreDoc(collectionName, userId, defaultValue, ttl = DEFAULT_TTL_MS) {
-  const cacheKey = userId ? `${collectionName}:${userId}` : null;
-  const cached = cacheKey ? getCached(cacheKey) : null;
+export function useCachedFirestoreDoc(
+  collectionName,
+  userId,
+  defaultValue,
+  ttl = CACHE_TTL.firestore
+) {
+  const cacheKey = userId ? `firestore:${collectionName}:${userId}` : null;
+  const cached = cacheKey ? getMemoryCached(cacheKey, ttl) : null;
 
   const [data, setData] = useState(cached ?? null);
   const [loading, setLoading] = useState(!cached);
@@ -30,7 +24,7 @@ export function useCachedFirestoreDoc(collectionName, userId, defaultValue, ttl 
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = () => {
-    if (cacheKey) cache.delete(cacheKey);
+    if (cacheKey) deleteMemoryCached(cacheKey);
     setRefreshKey((key) => key + 1);
   };
 
@@ -42,7 +36,7 @@ export function useCachedFirestoreDoc(collectionName, userId, defaultValue, ttl 
     }
 
     let isMounted = true;
-    const stale = getCached(cacheKey);
+    const stale = getMemoryCached(cacheKey, ttl);
 
     if (stale) {
       setData(stale);
@@ -58,7 +52,7 @@ export function useCachedFirestoreDoc(collectionName, userId, defaultValue, ttl 
         const snapshot = await safeGetDoc(docRef);
         const nextData = snapshot?.exists() ? snapshot.data() : defaultValue;
         if (!isMounted) return;
-        setCached(cacheKey, nextData, ttl);
+        setMemoryCached(cacheKey, nextData, ttl);
         setData(nextData);
       } catch (err) {
         console.error(`Error fetching ${collectionName}:`, err);
@@ -81,5 +75,5 @@ export function useCachedFirestoreDoc(collectionName, userId, defaultValue, ttl 
 
 export function invalidateFirestoreDocCache(collectionName, userId) {
   if (!userId) return;
-  cache.delete(`${collectionName}:${userId}`);
+  deleteMemoryCached(`firestore:${collectionName}:${userId}`);
 }

@@ -24,10 +24,13 @@ import {
   remove,
   get
 } from "firebase/database";
-import { onAuthStateChanged } from "firebase/auth";
-import NavBar from "../../components/NavBar"; // Adjust path
-import Footer from "../../components/Footer"; // Adjust path
-import ChatInterface from "../../components/ChatInterface"; // Adjust path
+import { fetchTmdbEndpoint } from "../../lib/tmdbEndpoint";
+import { useAuth } from "../../hooks/useAuth";
+import dynamic from "next/dynamic";
+
+const ChatInterface = dynamic(() => import("../../components/ChatInterface"), {
+  ssr: false,
+});
 import EpisodeCard from "../../components/RoomEpisodeCard"; // *** Ensure this path is correct ***
 import { Skeleton, SkeletonPage, SkeletonEpisodeStrip } from "../../components/skeleton";
 import toast, { Toaster } from "react-hot-toast";
@@ -49,35 +52,15 @@ const IMAGE_BASE_URL_ORIGINAL = "https://image.tmdb.org/t/p/original";
 const TMDB_API_KEY = process.env.NEXT_PUBLIC_API_KEY; // Corrected: Use NEXT_PUBLIC_API_KEY consistently
 const DEBOUNCE_DELAY = 400; // milliseconds for search debounce
 
-const fetchTMDB = async (endpoint) => {
-  // **FIXED: Use TMDB_API_KEY constant**
-  const url = `https://api.themoviedb.org/3/${endpoint}${
-    endpoint.includes("?") ? "&" : "?"
-  }api_key=${TMDB_API_KEY}&language=en-US`;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error("TMDB API Error:", response.status, await response.text());
-      // Return a specific error object or rethrow for better handling
-      throw new Error(`TMDB Error: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching TMDB data:", error);
-    // Re-throw the error so calling functions can catch it
-    throw error;
-  }
-};
+const fetchTMDB = fetchTmdbEndpoint;
 // --- End Constants and Helpers ---
 
 const RoomPage = () => {
   const router = useRouter();
   const { roomId } = router.query;
 
-  // Auth State
-  const [currentUser, setCurrentUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [currentUserFriends, setCurrentUserFriends] = useState([]); // State for friend UIDs
+  const { user: currentUser, loading: authLoading } = useAuth();
+  const [currentUserFriends, setCurrentUserFriends] = useState([]);
 
   // Room State
   const [roomData, setRoomData] = useState(null);
@@ -106,16 +89,6 @@ const RoomPage = () => {
   const [episodes, setEpisodes] = useState([]);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   const seasonSectionRef = useRef(null);
-
-  // --- Auth Listener ---
-  useEffect(() => {
-    setAuthLoading(true);
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
 
   // --- Fetch Current User's Friends List UIDs (Real-time) ---
   useEffect(() => {
@@ -836,21 +809,16 @@ const handleRemoveMember = async (memberUidToRemove) => {
     // Handles "not member" or "not found" errors set earlier
     return (
       <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4">
-        {" "}
-        <NavBar />{" "}
-        <div className="text-center mt-20">
-          {" "}
-          <h2 className="text-2xl text-red-500 mb-4">Error</h2>{" "}
-          <p className="text-textsecondary mb-6">{error}</p>{" "}
+        <div className="text-center">
+          <h2 className="text-2xl text-red-500 mb-4">Error</h2>
+          <p className="text-textsecondary mb-6">{error}</p>
           <button
             onClick={() => router.push("/rooms")}
             className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"
           >
-            {" "}
-            Back to Rooms{" "}
-          </button>{" "}
-        </div>{" "}
-        <Footer />{" "}
+            Back to Rooms
+          </button>
+        </div>
       </div>
     );
   }
@@ -858,23 +826,18 @@ const handleRemoveMember = async (memberUidToRemove) => {
   if (!currentUser || !roomData) {
     return (
       <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4">
-        {" "}
-        <NavBar />{" "}
-        <div className="text-center mt-20">
-          {" "}
-          <h2 className="text-2xl text-red-500 mb-4">Access Denied</h2>{" "}
+        <div className="text-center">
+          <h2 className="text-2xl text-red-500 mb-4">Access Denied</h2>
           <p className="text-textsecondary mb-6">
             Could not load room data or user information.
-          </p>{" "}
+          </p>
           <button
             onClick={() => router.push("/rooms")}
             className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"
           >
-            {" "}
-            Back to Rooms{" "}
-          </button>{" "}
-        </div>{" "}
-        <Footer />{" "}
+            Back to Rooms
+          </button>
+        </div>
       </div>
     );
   }

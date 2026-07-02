@@ -1,19 +1,16 @@
-// pages/profile.js (or wherever your profile page is)
-import React, { useEffect, useState } from "react";
-import NavBar from "../../components/NavBar"; // Adjust path
-import Footer from "../../components/Footer"; // Adjust path (Add Footer if missing)
+import React, { useState } from "react";
 import { auth, db } from "../../firebase";
-import { useAuth } from "../../hooks/useAuth";
 import { doc, updateDoc } from "firebase/firestore";
-import { safeGetDoc } from "../../lib/firestore";
 import { useRouter } from "next/router";
 import { signOut } from "firebase/auth";
-import StatsCard from "../../components/StatsCard"; // Adjust path
+import StatsCard from "../../components/StatsCard";
 import { SkeletonProfilePage } from "../../components/skeleton";
-import toast, { Toaster } from 'react-hot-toast'; // For feedback
-import { FaEdit, FaSave, FaSignOutAlt } from "react-icons/fa"; // Icons
+import toast, { Toaster } from 'react-hot-toast';
+import { FaEdit, FaSave, FaSignOutAlt } from "react-icons/fa";
 import { SeoHead } from "../../components/SeoHead";
 import { motion } from "framer-motion";
+import { useProfileData } from "../../hooks/useProfileData";
+import { invalidateCachedUser } from "../../lib/cachedUsers";
 // Genre Map (Ensure this covers IDs present in your data, including TV genres)
 const genreMap = {
     28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
@@ -27,114 +24,28 @@ const genreMap = {
 
 
 export default function Profile() {
-  const [userData, setUserData] = useState(null); // Renamed from 'user' to avoid conflict
-  const [stats, setStats] = useState({
-    buddies: 0, moviesWatched: 0, episodesWatched: 0, topGenre: "N/A", // Default N/A
-    favoriteMovies: 0, favoriteEpisodes: 0, favoriteShows: 0 // Added favoriteShows
-  });
-  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState("");
-  const [error, setError] = useState(null); // Add error state
   const router = useRouter();
-  const { user: currentUser, loading: authLoading } = useAuth();
+  const {
+    currentUser,
+    userData,
+    setUserData,
+    stats,
+    loading,
+    error,
+  } = useProfileData(genreMap);
 
-  useEffect(() => {
-    if (authLoading) return;
+  React.useEffect(() => {
+    if (userData?.username) setUsername(userData.username);
+  }, [userData?.username]);
 
-    const fetchUserDataAndStats = async () => {
-        setLoading(true);
-        setError(null);
-        if (!currentUser) {
-            toast.error("Please log in to view your profile.");
-            router.push("/");
-            setLoading(false);
-            return;
-        }
-
-      try {
-        // Fetch User Data
-        const userRef = doc(db, "users", currentUser.uid);
-        const userDoc = await safeGetDoc(userRef);
-        if (userDoc?.exists()) {
-             const data = userDoc.data();
-             setUserData(data);
-             setUsername(data.username); // Initialize username state
-        } else {
-             throw new Error("User data not found."); // Handle case where user doc doesn't exist
-        }
-
-        // Fetch Stats Data (History, Favorites, Friends)
-        const historyDoc = await safeGetDoc(doc(db, "history", currentUser.uid));
-        const favoritesDoc = await safeGetDoc(doc(db, "favorites", currentUser.uid));
-        const friendsDoc = await safeGetDoc(doc(db, "friends", currentUser.uid));
-
-        const historyData = historyDoc?.exists() ? historyDoc.data() : { movies: [], episodes: [] };
-        const favoritesData = favoritesDoc?.exists() ? favoritesDoc.data() : { movies: [], episodes: [], shows: [] };
-        const friendsData = friendsDoc?.exists() ? friendsDoc.data() : { friends: [] };
-
-        // Calculate Stats
-        const moviesWatched = historyData.movies?.length || 0;
-        const episodesWatched = historyData.episodes?.length || 0;
-        const favoriteMovies = favoritesData.movies?.length || 0;
-        const favoriteEpisodes = favoritesData.episodes?.length || 0;
-        const favoriteShows = favoritesData.shows?.length || 0; // Calculate favorite shows
-        const buddies = friendsData.friends?.length || 0;
-
-       // --- Calculate Top Genre ---
-       const genreCounts = {};
-       // Ensure history arrays exist before trying to combine/iterate
-       const allHistoryItems = [...(historyData.movies || []), ...(historyData.episodes || [])];
-
-       allHistoryItems.forEach((item) => {
-           if (!item) return; // Skip null/undefined items
-
-           let itemGenreIds = [];
-
-           // Check for genre_ids array (array of numbers)
-           if (Array.isArray(item.genre_ids) && item.genre_ids.length > 0) {
-               itemGenreIds = item.genre_ids.filter(id => typeof id === 'number'); // Ensure they are numbers
-           }
-           // Else, check for genres array (array of objects {id, name})
-           else if (Array.isArray(item.genres) && item.genres.length > 0) {
-               itemGenreIds = item.genres.map(g => g?.id).filter(id => typeof id === 'number'); // Safely map and filter
-           }
-           // If neither exists or is valid, itemGenreIds remains empty
-
-           // Count valid IDs
-           itemGenreIds.forEach((genreId) => {
-               // Double check genreId is valid before counting
-               if (genreId) {
-                   genreCounts[genreId] = (genreCounts[genreId] || 0) + 1;
-               }
-           });
-       });
-
-       // Find the top genre ID (This logic remains correct)
-       let topGenreName = "N/A"; // Default
-       if (Object.keys(genreCounts).length > 0) {
-           // Find the key (genre ID string) with the highest value
-           const topGenreId = Object.keys(genreCounts).reduce((a, b) => genreCounts[a] > genreCounts[b] ? a : b );
-           // Look up name in map, fallback to ID if not found
-           topGenreName = genreMap[topGenreId] || `Unknown (ID: ${topGenreId})`; // More descriptive fallback
-       }
-       // --- End Genre Calculation ---
-
-        setStats({
-            buddies, moviesWatched, episodesWatched,
-            topGenre: topGenreName, favoriteMovies, favoriteEpisodes, favoriteShows
-        });
-
-      } catch (err) {
-        console.error("Error fetching user data/stats:", err);
-        setError(err.message || "Failed to load profile data.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUserDataAndStats();
-  }, [currentUser, authLoading, router]);
+  React.useEffect(() => {
+    if (!loading && !currentUser) {
+      toast.error("Please log in to view your profile.");
+      router.push("/");
+    }
+  }, [loading, currentUser, router]);
 
   // Handle Save Username
   const handleSave = async () => {
@@ -157,7 +68,8 @@ export default function Profile() {
              username_lowercase: username.trim().toLowerCase(),
         });
         // Optimistically update local state first for better UX
-        setUserData(prev => ({...prev, username: username.trim()}));
+        setUserData((prev) => ({ ...prev, username: username.trim() }));
+        invalidateCachedUser(currentUser.uid);
         toast.success("Username updated!", { id: savingToast });
         setIsEditing(false);
     } catch(err) {
@@ -179,19 +91,16 @@ export default function Profile() {
      }
   };
 
-  // --- Render Loading ---
-  if (authLoading || loading) {
+  if (loading) {
     return <SkeletonProfilePage />;
   }
 
-   // --- Render Error ---
    if (error) {
-       return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Profile</h2> <p className="text-textsecondary mb-6">{error}</p> </div> <Footer /> </div> );
+       return ( <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]"> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Profile</h2> <p className="text-textsecondary mb-6">{error}</p> </div> </div> );
     }
 
-  // --- Main Render ---
   return (
-    <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center p-4 md:p-6 font-poppins">
+    <div className="flex flex-col items-center p-4 md:p-6">
       <SeoHead title="Profile" description="Manage your Bombe profile and preferences." canonicalPath="/profile" noindex />
       <Toaster position="bottom-center" toastOptions={{ className: 'bg-secondary text-textprimary',}} />
        {/* Main Profile Card - Themed */}
@@ -275,7 +184,6 @@ export default function Profile() {
           <FaSignOutAlt /> Logout
         </button>
       </div>
-       <Footer /> {/* Add Footer */}
     </div>
   );
 }

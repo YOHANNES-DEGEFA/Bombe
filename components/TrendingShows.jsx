@@ -9,18 +9,25 @@ import { SkeletonHero } from "./skeleton";
 
 const IMAGE_BASE_URL = TMDB_IMAGE_ORIGINAL;
 
-const TrendingShows = () => {
-  const [trendingShows, setTrendingShows] = useState([]);
+const TrendingShows = ({ items: itemsProp }) => {
+  const [trendingShows, setTrendingShows] = useState(itemsProp || []);
   const [currentShowIndex, setCurrentShowIndex] = useState(0);
   const [direction, setDirection] = useState(0);
   const router = useRouter();
-  const [loadingList, setLoadingList] = useState(true);
+  const [loadingList, setLoadingList] = useState(!itemsProp?.length);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [showDetails, setShowDetails] = useState(null);
   const intervalRef = useRef(null);
 
   // Fetch trending shows list
   useEffect(() => {
+    if (itemsProp?.length) {
+      setTrendingShows(itemsProp);
+      setCurrentShowIndex(0);
+      setLoadingList(false);
+      return;
+    }
+
     setLoadingList(true);
     const fetchTrending = async () => {
       try {
@@ -42,7 +49,7 @@ const TrendingShows = () => {
       }
     };
     fetchTrending();
-  }, []);
+  }, [itemsProp]);
 
    // Fetch details for the current show
    useEffect(() => {

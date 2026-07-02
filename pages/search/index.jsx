@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import MovieCard from "../../components/MinimalCard";
 import { useRouter } from "next/router";
 import { SkeletonSearchPage, SkeletonGrid } from "../../components/skeleton";
 import { SeoHead } from "../../components/SeoHead";
 import { truncateMeta } from "../../lib/seo";
-const BASE_URL = "https://api.themoviedb.org/3";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
+import { tmdbGet } from "../../lib/tmdb";
+import { getCachedGenres } from "../../lib/tmdbGenres";
 
 const SearchPage = () => {
   const router = useRouter();
@@ -30,10 +29,8 @@ const SearchPage = () => {
   useEffect(() => {
     const fetchGenres = async () => {
       try {
-        const response = await axios.get(`${BASE_URL}/genre/movie/list`, {
-          params: { api_key: API_KEY, language: "en-US" },
-        });
-        setGenres(response.data.genres);
+        const genreList = await getCachedGenres();
+        setGenres(genreList);
       } catch (error) {
         console.error("Error fetching genres:", error);
       } finally {
@@ -48,10 +45,8 @@ const SearchPage = () => {
     if (!query && !initialLoad) {
       const fetchMostSearched = async () => {
         try {
-          const response = await axios.get(`${BASE_URL}/trending/all/week`, {
-            params: { api_key: API_KEY },
-          });
-          const filteredResults = response.data.results.filter(
+          const response = await tmdbGet("trending/all/week");
+          const filteredResults = (response.data?.results || []).filter(
             (item) => item.poster_path
           );
           setMostSearched(filteredResults.slice(0, 10));
@@ -69,15 +64,14 @@ const SearchPage = () => {
       const fetchResults = async () => {
         setLoading(true);
         try {
-          const response = await axios.get(`${BASE_URL}/search/multi`, {
+          const response = await tmdbGet("search/multi", {
             params: {
-              api_key: API_KEY,
-              query: query,
-              year: year ? parseInt(year) : undefined,
+              query,
+              year: year ? parseInt(year, 10) : undefined,
               with_genres: genre || undefined,
             },
           });
-          let filteredResults = response.data.results;
+          let filteredResults = response.data?.results || [];
           if (query) {
             filteredResults = response.data.results.filter(
               (item) =>
@@ -242,6 +236,7 @@ const SearchPage = () => {
                   <MovieCard
                     key={item.id}
                     movie={item}
+                    skipDetailFetch
                     onClick={() =>
                       router.push(`/${item.media_type}/${item.id}`)
                     }
@@ -259,6 +254,7 @@ const SearchPage = () => {
                   <MovieCard
                     key={item.id}
                     movie={item}
+                    skipDetailFetch
                     onClick={() =>
                       router.push(`/${item.media_type}/${item.id}`)
                     }

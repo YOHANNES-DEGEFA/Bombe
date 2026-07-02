@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter } from "next/router";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
-import NavBar from "../../../../components/NavBar"; // Adjust path
-import Footer from "../../../../components/Footer"; // Adjust path
 import EpisodeCard from "../../../../components/EpisodeCard"; // Adjust path
 import SearchCard from "../../../../components/MinimalCard"; // Adjust path
 import {
@@ -643,8 +641,8 @@ const TVShowPlayerPage = ({ initialTvShow = null, initialSeason = 1, initialEpis
 
     // --- Render States (Themed) ---
     if ((!isRouterReady && !initialTvShow) || loadingShow) { return <SkeletonWatchTvPage />; }
-    if (error) { return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Show</h2> <p className="text-textsecondary mb-6">{error}</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
-    if (!tvShow) { return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-yellow-500 mb-4">TV Show Not Found</h2> <p className="text-textsecondary mb-6">The requested TV show could not be found.</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
+    if (error) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Show</h2> <p className="text-textsecondary mb-6">{error}</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> </div> ); }
+    if (!tvShow) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <div className="text-center"> <h2 className="text-2xl text-yellow-500 mb-4">TV Show Not Found</h2> <p className="text-textsecondary mb-6">The requested TV show could not be found.</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> </div> ); }
 
     // --- Main Render (UPDATED) ---
     const tvTitle = tvShow ? `${tvShow.name} (S${selectedSeason} E${selectedEpisode})` : "TV Show Details";

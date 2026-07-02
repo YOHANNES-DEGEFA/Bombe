@@ -1,115 +1,20 @@
-// pages/recommended.js
-import React, { useEffect, useState, useMemo } from "react";
-import NavBar from "../../components/NavBar";      // Adjust path
-import Footer from "../../components/Footer";      // Adjust path
-import { db } from "../../firebase";
-import { useAuth } from "../../hooks/useAuth";
-import { doc } from "firebase/firestore";
-import { safeGetDoc } from "../../lib/firestore";
-import MovieCard from "../../components/MinimalCard"; // Adjust path
+import React, { useState, useMemo } from "react";
+import MovieCard from "../../components/MinimalCard";
 import { SkeletonCardGridPage } from "../../components/skeleton";
 import { useRouter } from "next/router";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from 'next/link';
 import { SeoHead } from "../../components/SeoHead";
 import { Toaster } from 'react-hot-toast';
-import { FaChevronDown, FaChevronUp, FaFilm, FaTv } from "react-icons/fa"; // Icons
+import { FaChevronDown, FaChevronUp, FaFilm, FaTv } from "react-icons/fa";
+import { useAuth } from "../../hooks/useAuth";
+import { useRecommendations } from "../../hooks/useRecommendations";
 
-// Constants (Ensure these are defined or imported if used elsewhere)
 const IMAGE_BASE_URL_W500 = "https://image.tmdb.org/t/p/w500";
 
-// Custom hook to fetch recommendations and usernames
-const useRecommendations = (userId) => {
-  const [recommendations, setRecommendations] = useState(null); // Start as null
-  const [userUsernames, setUserUsernames] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    let isMounted = true; // Prevent state updates on unmounted component
-    const fetchAll = async () => {
-        setLoading(true);
-        setError(null);
-        setRecommendations(null); // Reset recommendations on new fetch
-        setUserUsernames({}); // Reset usernames
-
-        if (!userId) {
-             setRecommendations({ movies: [], episodes: [] }); // Default empty if no user
-             setLoading(false);
-             return;
-        }
-
-      try {
-        // 1. Fetch Recommendations
-        const recommendationsRef = doc(db, "recommendations", userId);
-        const recommendationsDoc = await safeGetDoc(recommendationsRef);
-        const recData = recommendationsDoc?.exists() ? recommendationsDoc.data() : { movies: [], episodes: [] };
-        // Ensure arrays exist
-        recData.movies = recData.movies || [];
-        recData.episodes = recData.episodes || [];
-
-        if (!isMounted) return; // Check before first state update
-        setRecommendations(recData);
-
-        // 2. Fetch Usernames for Recommenders
-        const recommendedByUserIds = new Set([
-          ...(recData.movies.map(movie => movie.recommendedBy) || []),
-          ...(recData.episodes.map(episode => episode.recommendedBy) || []),
-        ]);
-
-        const usernamePromises = Array.from(recommendedByUserIds)
-            .filter(Boolean) // Remove null/undefined IDs
-            .map(async (recommendedByUserId) => {
-                try {
-                    const userRef = doc(db, "users", recommendedByUserId);
-                    const userDoc = await safeGetDoc(userRef);
-                    if (userDoc?.exists()) {
-                        return { userId: recommendedByUserId, username: userDoc.data().username };
-                    }
-                    return { userId: recommendedByUserId, username: 'Unknown User' }; // Fallback
-                } catch (userError) {
-                    console.error(`Failed to fetch username for ${recommendedByUserId}:`, userError);
-                    return { userId: recommendedByUserId, username: 'Error Loading Name' }; // Indicate error fetching name
-                }
-         });
-
-        const usernamesData = await Promise.all(usernamePromises);
-        const usernamesMap = {};
-        usernamesData.forEach((user) => {
-            if (user) usernamesMap[user.userId] = user.username;
-        });
-
-        if (isMounted) {
-            setUserUsernames(usernamesMap);
-        }
-
-      } catch (err) {
-        console.error("Error fetching recommendations/usernames:", err);
-        if (isMounted) setError(err.message || "Failed to load recommendations.");
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    fetchAll();
-
-    // Cleanup function
-    return () => { isMounted = false; };
-  }, [userId]);
-
-  // Memoize results
-  const memoizedRecs = React.useMemo(() => recommendations, [recommendations]);
-  const memoizedUsernames = React.useMemo(() => userUsernames, [userUsernames]);
-
-  return { recommendations: memoizedRecs, userUsernames: memoizedUsernames, loading, error };
-};
-
-
-// Main RecommendedPage component
 const RecommendedPage = () => {
-  const { user: currentUser, userId } = useAuth();
-  const { recommendations, userUsernames, loading: dataLoading, error } = useRecommendations(userId);
-  const loading = dataLoading;
+  const { user: currentUser } = useAuth();
+  const { recommendations, userUsernames, loading, error } = useRecommendations(currentUser?.uid ?? null);
   const router = useRouter();
   const [expandedShows, setExpandedShows] = useState({});
   const [activeTab, setActiveTab] = useState('movies'); // 'movies' or 'episodes'
@@ -164,12 +69,11 @@ const RecommendedPage = () => {
 
   // --- Render Error ---
    if (error) {
-       return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Recommendations</h2> <p className="text-textsecondary mb-6">{error}</p> </div> <Footer /> </div> );
+       return ( <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]"> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Recommendations</h2> <p className="text-textsecondary mb-6">{error}</p> </div> </div> );
     }
 
-    // --- Render No User ---
     if (!currentUser) {
-        return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-accent mb-4">Log In Required</h2> <p className="text-textsecondary mb-6">Please log in to view recommendations.</p> <button onClick={() => router.push('/')} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Log In </button> </div> <Footer /> </div> );
+        return ( <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]"> <div className="text-center"> <h2 className="text-2xl text-accent mb-4">Log In Required</h2> <p className="text-textsecondary mb-6">Please log in to view recommendations.</p> <button onClick={() => router.push('/')} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Log In </button> </div> </div> );
      }
 
     // Ensure recommendations object exists before accessing its properties
@@ -178,11 +82,10 @@ const RecommendedPage = () => {
 
   // --- Main Render ---
   return (
-    <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col font-poppins">
+    <>
       <SeoHead title="Recommended For You" description="Movies and TV shows recommended by your friends on Bombe." canonicalPath="/recommended" noindex />
       <Toaster position="bottom-center" toastOptions={{ className: 'bg-secondary text-textprimary',}} />
-      <div className="flex-grow"> {/* pt-16 removed as margin added to outer div */}
-         <main className="p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
+      <main className="p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
            <h1 className="text-3xl md:text-4xl font-bold mb-6 text-textprimary">Recommended For You</h1>
 
             {/* Tab Navigation */}
@@ -207,6 +110,7 @@ const RecommendedPage = () => {
                                <MovieCard
                                     movie={movie}
                                     onClick={() => handleNavigate("movie", movie.id)}
+                                    skipDetailFetch
                                 />
                                <p className="text-xs mt-1.5 text-textsecondary text-center truncate px-1" title={`Recommended by: ${userUsernames[movie.recommendedBy] || movie.recommendedBy}`}>
                                  Rec by: {userUsernames[movie.recommendedBy] || '...'} {/* Use username map */}
@@ -269,8 +173,7 @@ const RecommendedPage = () => {
               )}
            </div>
          </main>
-       </div>
-    </div>
+    </>
   );
 };
 

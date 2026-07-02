@@ -1,12 +1,14 @@
 // components/NavBar.js
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { FaBars } from "react-icons/fa6";
 import { IoClose } from "react-icons/io5";
 import { RiAccountCircleFill, RiSearchLine } from "react-icons/ri";
 import { useRouter } from "next/router";
 import Link from 'next/link';
-import SearchModal from './SearchModal'; // Assuming SearchModal is in the same directory
 import { motion, AnimatePresence } from "framer-motion";
+
+const SearchModal = dynamic(() => import('./SearchModal'), { ssr: false });
 
 // Navigation Links Data - Added "Watch Parties"
 const navLinks = [
@@ -101,7 +103,7 @@ function NavBar() {
                             <FaBars />
                         </button>
                         {/* Logo */}
-                        <Link href="/home" className="text-lg font-semibold cursor-pointer text-textprimary hover:text-accent transition-colors duration-200 ease-in-out tracking-tight">
+                        <Link href="/home" title="Bombe" aria-label="Bombe home" className="text-lg font-semibold cursor-pointer text-textprimary hover:text-accent transition-colors duration-200 ease-in-out tracking-tight">
                             Bom<span className="text-accent">be</span>
                         </Link>
                     </div>

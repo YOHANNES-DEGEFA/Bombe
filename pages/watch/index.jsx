@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
+import { tmdbGet } from "../../lib/tmdb";
 import { motion, AnimatePresence } from "framer-motion"; // Added AnimatePresence
 import MovieCard from "../../components/MinimalCard";
 import SearchCard from "../../components/MinimalCard";
@@ -27,7 +27,6 @@ import toast, { Toaster } from "react-hot-toast";
 import { IoClose } from "react-icons/io5";
 import Head from "next/head"; // <-- IMPORTED Head
 
-const BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL_W500 = "https://image.tmdb.org/t/p/w500";
 const IMAGE_BASE_URL_ORIGINAL = "https://image.tmdb.org/t/p/original";
 const IMAGE_BASE_URL_W185 = "https://image.tmdb.org/t/p/w185"; // For cast
@@ -244,14 +243,13 @@ const RecommendationsModal = ({ onClose, recommendedMovies, router }) => {
 const MovieDetailPage = () => {
   const router = useRouter();
   const { movie_id: id } = router.query;
-  const apiKey = process.env.NEXT_PUBLIC_API_KEY;
 
   const isRouterReady = router.isReady;
   const validId = isRouterReady ? id || null : null;
 
-  const { movie, loading: loadingMovie, error } = useMovie(validId, apiKey);
-  const { recommendedMovies } = useRecommendedMovies(validId, apiKey);
-  const { cast, trailerKey, director } = useAdditionalDetails(movie, apiKey);
+  const { movie, loading: loadingMovie, error } = useMovie(validId);
+  const { recommendedMovies } = useRecommendedMovies(validId);
+  const { cast, trailerKey, director } = useAdditionalDetails(movie);
 
   const [rating, setRating] = useState(0);
   const [savedRating, setSavedRating] = useState(null);
@@ -280,8 +278,8 @@ const MovieDetailPage = () => {
 
   // --- Render States (No Changes) ---
   if (!isRouterReady || loadingMovie) { return <SkeletonDetailPage />; }
-  if (error) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center mt-20"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Movie</h2> <p className="text-textsecondary mb-6">{error}</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
-  if (!movie) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center mt-20"> <h2 className="text-2xl text-yellow-500 mb-4">Movie Not Found</h2> <p className="text-textsecondary mb-6">The requested movie could not be found.</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
+  if (error) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Movie</h2> <p className="text-textsecondary mb-6">{error}</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> </div> ); }
+  if (!movie) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <div className="text-center"> <h2 className="text-2xl text-yellow-500 mb-4">Movie Not Found</h2> <p className="text-textsecondary mb-6">The requested movie could not be found.</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> </div> ); }
 
   // --- Main Render (UPDATED) ---
   return (
@@ -475,16 +473,16 @@ const MovieDetailPage = () => {
 };
 
 // --- Custom Hooks (Paste your existing hook code here) ---
-const useMovie = (id, apiKey) => {
+const useMovie = (id) => {
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   useEffect(() => {
     const fetchMovie = async () => {
       setLoading(true); setMovie(null); setError(null);
-      if (!id || !apiKey || id === '0') { setLoading(false); return; }
+      if (!id || id === '0') { setLoading(false); return; }
       try {
-        const response = await axios.get(`${BASE_URL}/movie/${id}`, { params: { api_key: apiKey, language: 'en-US' } });
+        const response = await tmdbGet(`movie/${id}`, { params: { language: 'en-US' } });
         if (response.data) setMovie(response.data);
         else throw new Error(`Movie with ID ${id} not found.`);
       } catch (err) { console.error("Error in useMovie:", err); setError(err.message || "Failed to fetch movie data.");
@@ -492,48 +490,48 @@ const useMovie = (id, apiKey) => {
     };
     if (id && id !== '0') fetchMovie();
     else setLoading(false);
-  }, [id, apiKey]);
+  }, [id]);
   return { movie, loading, error };
 };
 
-const useRecommendedMovies = (id, apiKey) => {
+const useRecommendedMovies = (id) => {
   const [recommendedMovies, setRecommendedMovies] = useState([]);
   useEffect(() => {
     const fetchRecommendedMovies = async () => {
-      if (!id || !apiKey || id === '0') { setRecommendedMovies([]); return; }
+      if (!id || id === '0') { setRecommendedMovies([]); return; }
       try {
-        const response = await axios.get(`${BASE_URL}/movie/${id}/recommendations`, { params: { api_key: apiKey, language: 'en-US', page: 1 } });
-        const filtered = response.data.results.filter(m => m.poster_path).slice(0, 10); // Sliced to 10
+        const response = await tmdbGet(`movie/${id}/recommendations`, { params: { language: 'en-US', page: 1 } });
+        const filtered = (response.data?.results || []).filter(m => m.poster_path).slice(0, 10);
         setRecommendedMovies(filtered);
       } catch (error) { console.error("Error fetching recommended movies:", error); setRecommendedMovies([]); }
     };
     if (id && id !== '0') fetchRecommendedMovies();
     else setRecommendedMovies([]);
-  }, [id, apiKey]);
+  }, [id]);
   return { recommendedMovies };
 };
 
-const useAdditionalDetails = (movie, apiKey) => {
+const useAdditionalDetails = (movie) => {
   const [cast, setCast] = useState([]);
   const [trailerKey, setTrailerKey] = useState("");
   const [director, setDirector] = useState(null);
   useEffect(() => {
-    if (!movie || !movie.id || !apiKey) { setCast([]); setTrailerKey(""); setDirector(null); return; };
+    if (!movie || !movie.id) { setCast([]); setTrailerKey(""); setDirector(null); return; };
     const fetchAdditionalDetails = async () => {
       try {
         const [creditsResponse, videosResponse] = await Promise.all([
-          axios.get(`${BASE_URL}/movie/${movie.id}/credits`, { params: { api_key: apiKey, language: 'en-US' }, }),
-          axios.get(`${BASE_URL}/movie/${movie.id}/videos`, { params: { api_key: apiKey, language: 'en-US' }, }),
+          tmdbGet(`movie/${movie.id}/credits`, { params: { language: 'en-US' } }),
+          tmdbGet(`movie/${movie.id}/videos`, { params: { language: 'en-US' } }),
         ]);
-        setCast(creditsResponse.data.cast.slice(0, 6)); // Sliced to 6
-        const directorData = creditsResponse.data.crew.find((member) => member.job === "Director");
+        setCast((creditsResponse.data?.cast || []).slice(0, 6));
+        const directorData = (creditsResponse.data?.crew || []).find((member) => member.job === "Director");
         setDirector(directorData || null);
-        const trailer = videosResponse.data.results.find((vid) => vid.type === "Trailer" && vid.site === "YouTube");
+        const trailer = (videosResponse.data?.results || []).find((vid) => vid.type === "Trailer" && vid.site === "YouTube");
         setTrailerKey(trailer ? trailer.key : "");
       } catch (error) { console.error("Error fetching additional movie data:", error); setCast([]); setTrailerKey(""); setDirector(null); }
     };
     fetchAdditionalDetails();
-  }, [movie, apiKey]);
+  }, [movie]);
   return { cast, trailerKey, director };
 };
 // --- End Custom Hooks ---

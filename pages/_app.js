@@ -1,19 +1,28 @@
 import '../styles/global.css'
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { Inter } from 'next/font/google';import { Analytics } from '@vercel/analytics/next';
+import { Inter } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/next';
 import { installTmdbRateLimiter } from '../lib/tmdbRateLimiter';
 import TvRemoteNavigation from '../components/TvRemoteNavigation';
 import AppLayout from '../components/AppLayout';
 import { AuthProvider } from '../context/AuthContext';
 import { WatchlistProvider } from '../context/WatchlistContext';
-import { DEFAULT_DESCRIPTION, DEFAULT_KEYWORDS, DEFAULT_TITLE, getSiteUrl } from '../lib/seo';
+import {
+  buildBrandJsonLd,
+  DEFAULT_DESCRIPTION,
+  DEFAULT_KEYWORDS,
+  DEFAULT_TITLE,
+  getSiteUrl,
+} from '../lib/seo';
+
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
 });
 
 const ROUTES_WITHOUT_LAYOUT = ['/'];
+const brandJsonLd = buildBrandJsonLd();
 
 installTmdbRateLimiter();
 
@@ -27,6 +36,8 @@ function AppContent({ Component, pageProps }) {
 }
 
 export default function App({ Component, pageProps }) {
+  const googleVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION;
+
   return (
     <div className={inter.className}>
       <Head>
@@ -45,6 +56,10 @@ export default function App({ Component, pageProps }) {
         <meta name="keywords" content={DEFAULT_KEYWORDS} />
         <meta name="robots" content="index, follow, max-image-preview:large" />
 
+        {googleVerification && (
+          <meta name="google-site-verification" content={googleVerification} />
+        )}
+
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Bombe" />
         <meta property="og:title" content={DEFAULT_TITLE} />
@@ -54,7 +69,16 @@ export default function App({ Component, pageProps }) {
 
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={DEFAULT_TITLE} />
-        <meta name="twitter:description" content={DEFAULT_DESCRIPTION} />      </Head>
+        <meta name="twitter:description" content={DEFAULT_DESCRIPTION} />
+
+        {brandJsonLd.map((schema) => (
+          <script
+            key={schema["@id"] || schema["@type"]}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          />
+        ))}
+      </Head>
       <AuthProvider>
         <WatchlistProvider>
           <TvRemoteNavigation />

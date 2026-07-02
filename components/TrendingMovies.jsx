@@ -10,18 +10,25 @@ import { SkeletonHero } from "./skeleton";
 
 const IMAGE_BASE_URL = TMDB_IMAGE_ORIGINAL;
 
-const TrendingMovies = () => {
-  const [trendingMovies, setTrendingMovies] = useState([]);
+const TrendingMovies = ({ items: itemsProp }) => {
+  const [trendingMovies, setTrendingMovies] = useState(itemsProp || []);
   const [currentMovieIndex, setCurrentMovieIndex] = useState(0);
   const [direction, setDirection] = useState(0);
   const router = useRouter();
-  const [loadingList, setLoadingList] = useState(true);
+  const [loadingList, setLoadingList] = useState(!itemsProp?.length);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [movieDetails, setMovieDetails] = useState(null);
   const intervalRef = useRef(null);
 
   // Fetch trending movies list (keep as is)
   useEffect(() => {
+    if (itemsProp?.length) {
+      setTrendingMovies(itemsProp);
+      setCurrentMovieIndex(0);
+      setLoadingList(false);
+      return;
+    }
+
     setLoadingList(true);
     const fetchTrending = async () => {
       try {
@@ -41,7 +48,7 @@ const TrendingMovies = () => {
       }
     };
     fetchTrending();
-  }, []);
+  }, [itemsProp]);
 
    // Fetch details for the current movie (keep as is)
    useEffect(() => {

@@ -20,7 +20,8 @@ export async function getServerSideProps({ res }) {
   const siteUrl = getSiteUrl();
 
   const staticPages = [
-    { loc: `${siteUrl}/home`, changefreq: "daily", priority: "1.0" },
+    { loc: siteUrl, changefreq: "daily", priority: "1.0" },
+    { loc: `${siteUrl}/home`, changefreq: "daily", priority: "0.9" },
     { loc: `${siteUrl}/search`, changefreq: "weekly", priority: "0.8" },
   ];
 
