@@ -2,14 +2,14 @@ import dynamic from "next/dynamic";
 import { FaFire, FaStar } from "react-icons/fa";
 import { motion } from "framer-motion";
 import MovieCard from "../../components/MinimalCard";
-import { SkeletonHomePage } from "../../components/skeleton";
+import { SkeletonHero, SkeletonHomePage } from "../../components/skeleton";
 import { SeoHead } from "../../components/SeoHead";
 import { buildBrandJsonLd } from "../../lib/seo";
 import { useHomeData } from "../../hooks/useHomeData";
 
 const TrendingMovies = dynamic(() => import("../../components/TrendingMovies"), {
   ssr: false,
-  loading: () => null,
+  loading: () => <SkeletonHero seed="trending-movies-hero" withMarginTop={false} className="-mt-16" />,
 });
 
 const TrendingShows = dynamic(() => import("../../components/TrendingShows"), {

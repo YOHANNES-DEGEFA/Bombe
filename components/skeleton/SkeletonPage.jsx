@@ -41,7 +41,7 @@ function SkeletonPageShell({
 function SkeletonHomePageComponent() {
   return (
     <SkeletonPageShell>
-      <SkeletonHero seed="home-hero" />
+      <SkeletonHero seed="home-hero" withMarginTop={false} className="-mt-16" />
       <main className="md:py-10">
         <SkeletonCarousel seed="trending-movies" count={8} />
         <SkeletonCarousel seed="rated-movies" count={8} />

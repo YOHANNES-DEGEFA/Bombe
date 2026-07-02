@@ -115,13 +115,12 @@ const TrendingMovies = ({ items: itemsProp }) => {
 
   // --- Render ---
   if (loadingList) {
-    return <SkeletonHero seed="trending-movies-hero" />;
+    return <SkeletonHero seed="trending-movies-hero" withMarginTop={false} className="-mt-16" />;
   }
 
   if (trendingMovies.length === 0) {
     return (
-      // Use Theme Color, Add mt-16
-      <div className="h-[60vh] mt-16 flex items-center justify-center bg-primary text-textsecondary"> {/* Use text-textsecondary */}
+      <div className="h-[60vh] -mt-16 flex items-center justify-center bg-primary text-textsecondary">
         <p>No trending movies found.</p>
       </div>
     );
@@ -132,9 +131,7 @@ const TrendingMovies = ({ items: itemsProp }) => {
   const showDetails = !loadingDetails && movieDetails && movieDetails.id === currentMovie.id;
 
   return (
-    // --- ADDED MARGIN TOP (mt-16), Themed Background ---
-    <div className="relative w-full h-[75vh] overflow-hidden font-poppins bg-primary mt-16" {...handlers}>
-    {/* --- END MARGIN TOP --- */}
+    <div className="relative w-full h-[75vh] overflow-hidden font-poppins bg-primary -mt-16" {...handlers}>
 
       {/* Background Image Slider */}
       <AnimatePresence initial={false} custom={direction} mode="sync">
