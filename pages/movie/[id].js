@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
+import { getApiErrorMessage, logAppError } from "../../lib/userFacingError";
 import { motion, AnimatePresence } from "framer-motion"; // Added AnimatePresence
 import MovieCard from "../../components/MinimalCard";
 import {
@@ -564,7 +565,9 @@ const useMovie = (id, apiKey, initialMovie = null) => {
                 const response = await axios.get(`${BASE_URL}/movie/${id}`, { params: { api_key: apiKey, language: 'en-US' } });
                 if (response.data) setMovie(response.data);
                 else throw new Error(`Movie with ID ${id} not found.`);
-            } catch (err) { console.error("Error in useMovie:", err); setError(err.message || "Failed to fetch movie data.");
+            } catch (err) {
+                logAppError("movie details", err);
+                setError(getApiErrorMessage(err, "We couldn't load this movie. Please try again."));
             } finally { setLoading(false); }
         };
         if (id && id !== '0') fetchMovie();

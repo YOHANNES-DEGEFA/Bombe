@@ -8,6 +8,7 @@ import {
   setMemoryCached,
   deleteMemoryCached,
 } from "../lib/memoryCache";
+import { getFirestoreErrorMessage, logAppError } from "../lib/userFacingError";
 
 export function useCachedFirestoreDoc(
   collectionName,
@@ -55,9 +56,14 @@ export function useCachedFirestoreDoc(
         setMemoryCached(cacheKey, nextData, ttl);
         setData(nextData);
       } catch (err) {
-        console.error(`Error fetching ${collectionName}:`, err);
+        logAppError(`${collectionName} doc`, err);
         if (!isMounted) return;
-        setError(err.message || `Failed to load ${collectionName}.`);
+        setError(
+          getFirestoreErrorMessage(
+            err,
+            "We couldn't load your data. Please try again."
+          )
+        );
         if (!stale) setData(defaultValue);
       } finally {
         if (isMounted) setLoading(false);

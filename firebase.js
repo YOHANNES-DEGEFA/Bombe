@@ -45,3 +45,9 @@ export function waitForFirestoreNetwork() {
 
 const databaseUrl = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
 export const rtdb = databaseUrl ? getDatabase(app, databaseUrl) : null;
+
+if (typeof window !== "undefined" && !databaseUrl) {
+  console.warn(
+    "[Bombe] Real-time chat is disabled because NEXT_PUBLIC_FIREBASE_DATABASE_URL is not configured."
+  );
+}

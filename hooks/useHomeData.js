@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { fetchHomePageData } from "../lib/homeData";
 import { CACHE_TTL, getMemoryCached } from "../lib/memoryCache";
+import {
+  getApiErrorMessage,
+  logAppError,
+} from "../lib/userFacingError";
 
 const EMPTY_HOME_DATA = {
   heroMovies: [],
@@ -38,19 +42,18 @@ export function useHomeData() {
           nextData.trendingShows,
         ].some((list) => list.length > 0);
         if (!hasAnyResults) {
-          setError("No movies or shows were returned from TMDB.");
+          setError("Nothing to show right now. Please try again later.");
         }
       })
       .catch((err) => {
-        console.error("Error fetching homepage data:", err);
+        logAppError("homepage data", err);
         if (!isMounted) return;
-        if (err.response) {
-          setError(`API Error: ${err.response.data?.status_message || err.message}`);
-        } else if (err.request) {
-          setError("Network error. Please check your connection.");
-        } else {
-          setError(`Failed to load data: ${err.message}`);
-        }
+        setError(
+          getApiErrorMessage(
+            err,
+            "We couldn't load content right now. Please try again later."
+          )
+        );
         if (!stale) setData(EMPTY_HOME_DATA);
       })
       .finally(() => {

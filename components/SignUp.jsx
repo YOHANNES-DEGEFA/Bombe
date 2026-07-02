@@ -7,6 +7,7 @@ import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } f
 import { doc, setDoc, collection, query, where, getDoc, getDocs } from "firebase/firestore";
 import AuthForm from "./AuthForm";
 import toast from 'react-hot-toast';
+import { getAuthErrorMessage, logAppError } from "../lib/userFacingError";
 
 export default function SignUp({ setIsSignUp }) {
   const router = useRouter();
@@ -111,8 +112,8 @@ export default function SignUp({ setIsSignUp }) {
         }
         router.push("/home");
     } catch (error) {
-        console.error("Google sign-up/in error:", error);
-        toast.error(`Google Sign-In failed: ${error.message}`);
+        logAppError("Google sign-up", error);
+        toast.error(getAuthErrorMessage(error, "Google sign-in failed. Please try again."));
     } finally {
          setIsLoading(false);
     }

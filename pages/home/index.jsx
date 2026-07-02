@@ -76,7 +76,7 @@ const MovieList = () => {
       <main className="md:py-10 max-w-full mx-auto">
         {error && (
           <div className="mb-8 p-4 bg-red-900/30 border border-red-700/50 text-red-300 rounded-md text-center">
-            Error loading some sections: {error}
+            {error}
           </div>
         )}
 

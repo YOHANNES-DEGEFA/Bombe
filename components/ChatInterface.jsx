@@ -120,7 +120,7 @@ const ChatInterface = ({ roomId }) => {
             </h3>
             {chatUnavailable && (
                 <p className="text-sm text-textsecondary text-center py-4 px-3">
-                    Chat is unavailable. Set NEXT_PUBLIC_FIREBASE_DATABASE_URL in your environment.
+                    Chat is temporarily unavailable. Please try again later.
                 </p>
             )}
             <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-secondary-light scrollbar-track-secondary">

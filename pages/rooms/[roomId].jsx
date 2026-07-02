@@ -26,6 +26,11 @@ import {
 } from "firebase/database";
 import { fetchTmdbEndpoint } from "../../lib/tmdbEndpoint";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  getApiErrorMessage,
+  getFirestoreErrorMessage,
+  logAppError,
+} from "../../lib/userFacingError";
 import dynamic from "next/dynamic";
 
 const ChatInterface = dynamic(() => import("../../components/ChatInterface"), {
@@ -119,7 +124,7 @@ const RoomPage = () => {
   // --- Fetch Room Data (Firestore) & Manage Membership ---
   useEffect(() => {
     if (authLoading || !roomId) {
-      setLoadingRoom(authLoading);
+      setLoadingRoom(true);
       return;
     }
     if (!currentUser) {
@@ -150,13 +155,12 @@ const RoomPage = () => {
           // Set room data and membership status
           setRoomData({ id: docSnap.id, ...data });
           setError(null);
-          setIsMember(true); // User is either creator or member at this point
+          setIsMember(true);
 
-          // Update local state based on Firestore (season/episode)
           setSelectedSeason(data.currentSeason || null);
           setSelectedEpisode(data.currentEpisode || null);
+          setLoadingRoom(false);
 
-          // Fetch member details (optimize if needed for large rooms)
           if (data.members && Array.isArray(data.members)) {
             try {
               // Optimization: Only refetch if member list actually changed
@@ -189,7 +193,7 @@ const RoomPage = () => {
             setMembersList([]);
           }
         } else {
-          setError(`Room with ID ${roomId} not found.`);
+          setError("This room doesn't exist or may have been deleted.");
           setRoomData(null);
           setIsMember(false);
           setMembersList([]);
@@ -197,8 +201,10 @@ const RoomPage = () => {
         setLoadingRoom(false);
       },
       (err) => {
-        console.error("Error fetching room data:", err);
-        setError("Failed to load room data. Check console for details.");
+        logAppError("room data", err);
+        setError(
+          getFirestoreErrorMessage(err, "We couldn't load this room. Please try again.")
+        );
         setLoadingRoom(false);
       }
     );
@@ -226,16 +232,17 @@ const RoomPage = () => {
               setSelectedSeason(seasonToLoad); // This will trigger the episode fetch effect
             } else {
               // Handle API error or no details found
-              toast.error(
-                `Could not load details for TV show ID: ${roomData.currentMediaId}`
-              );
+              toast.error("Couldn't load show details.");
               setTvShowDetails(null);
               setSelectedSeason(null);
               setEpisodes([]);
             }
           })
           .catch((err) => {
-            toast.error(`Error loading TV show details: ${err.message}`);
+            logAppError("room TV show details", err);
+            toast.error(
+              getApiErrorMessage(err, "Couldn't load show details.")
+            );
             setTvShowDetails(null);
             setSelectedSeason(null);
             setEpisodes([]);
@@ -297,13 +304,12 @@ const RoomPage = () => {
           }
         })
         .catch((err) => {
-          console.error(
-            `Error fetching episodes for season ${selectedSeason}:`,
-            err
-          );
-          // *** ADDED TOAST ERROR ***
+          logAppError(`room episodes S${selectedSeason}`, err);
           toast.error(
-            `Failed to load episodes for Season ${selectedSeason}: ${err.message}`
+            getApiErrorMessage(
+              err,
+              `Couldn't load episodes for Season ${selectedSeason}.`
+            )
           );
           setEpisodes([]);
           setSelectedEpisode(null); // Reset episode if fetch fails
@@ -387,9 +393,8 @@ const RoomPage = () => {
           setSearchResults([]); // Clear results if API returns unexpected format
         }
       } catch (error) {
-        console.error("Media Search error:", error);
-        // **FIX: Add user feedback**
-        toast.error(`Media search failed: ${error.message}`);
+        logAppError("room media search", error);
+        toast.error(getApiErrorMessage(error, "Search failed. Please try again."));
         setSearchResults([]); // Clear results on error
       } finally {
         // Stop loading spinner regardless of success/fail
@@ -464,8 +469,10 @@ const RoomPage = () => {
       setSelectedEpisode(null);
       setEpisodes([]);
     } catch (error) {
-      console.error("Error updating media:", error);
-      toast.error(`Failed to update room media: ${error.message}`, {
+      logAppError("room media update", error);
+      toast.error(
+        getFirestoreErrorMessage(error, "Couldn't update room media. Please try again."),
+        {
         id: selectToastId,
       });
       setIsSearchingMedia(false); // Ensure loading stops on error
@@ -510,8 +517,10 @@ const RoomPage = () => {
         block: "nearest",
       });
     } catch (error) {
-      console.error("Error updating season:", error);
-      toast.error(`Failed to update season: ${error.message}`);
+      logAppError("room season update", error);
+      toast.error(
+        getFirestoreErrorMessage(error, "Couldn't update season. Please try again.")
+      );
       // Optionally revert local state if Firestore update fails
       // setSelectedSeason(roomData.currentSeason); // Revert to Firestore value
       // setSelectedEpisode(roomData.currentEpisode);
@@ -548,8 +557,10 @@ const RoomPage = () => {
       toast.success(`Selected S${selectedSeason} E${episodeNumber}`);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
-      console.error("Error updating episode:", error);
-      toast.error(`Failed to update episode: ${error.message}`);
+      logAppError("room episode update", error);
+      toast.error(
+        getFirestoreErrorMessage(error, "Couldn't update episode. Please try again.")
+      );
       // Optionally revert local state
       // setSelectedEpisode(roomData.currentEpisode);
     }

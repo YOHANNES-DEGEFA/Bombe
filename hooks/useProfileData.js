@@ -3,6 +3,7 @@ import { useAuth } from "./useAuth";
 import { useCachedFirestoreDoc } from "./useCachedFirestoreDoc";
 import { getCachedUser } from "../lib/cachedUsers";
 import { CACHE_TTL, getMemoryCached } from "../lib/memoryCache";
+import { getUserFacingMessage, logAppError } from "../lib/userFacingError";
 
 const DEFAULT_HISTORY = { movies: [], episodes: [] };
 const DEFAULT_FAVORITES = { movies: [], episodes: [], shows: [] };
@@ -37,7 +38,7 @@ function calculateTopGenre(historyData, genreMap) {
   const topGenreId = Object.keys(genreCounts).reduce((a, b) =>
     genreCounts[a] > genreCounts[b] ? a : b
   );
-  return genreMap[topGenreId] || `Unknown (ID: ${topGenreId})`;
+  return genreMap[topGenreId] || "Other";
 }
 
 export function useProfileData(genreMap) {
@@ -91,8 +92,11 @@ export function useProfileData(genreMap) {
         setUserData(profile);
       })
       .catch((err) => {
+        logAppError("profile", err);
         if (!isMounted) return;
-        setError(err.message || "Failed to load profile.");
+        setError(
+          getUserFacingMessage(err, "We couldn't load your profile. Please try again.")
+        );
       })
       .finally(() => {
         if (isMounted) setProfileLoading(false);

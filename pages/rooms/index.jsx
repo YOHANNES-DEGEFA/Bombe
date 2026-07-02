@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { db } from "../../firebase";
 import {
@@ -18,6 +18,7 @@ import { useRouter } from "next/router";
 import { useAuth } from "../../hooks/useAuth";
 import { getCachedUsers, buildUsernameMap } from "../../lib/cachedUsers";
 import { CACHE_TTL, getMemoryCached, setMemoryCached } from "../../lib/memoryCache";
+import { getFirestoreErrorMessage, logAppError } from "../../lib/userFacingError";
 
 const ROOMS_CACHE_KEY = "rooms:all";
 
@@ -73,9 +74,9 @@ const RoomsPage = () => {
         setLoadingRooms(false);
       },
       (snapshotError) => {
-        console.error("Error fetching rooms:", snapshotError);
-        setError("Could not load rooms. Check Firestore permissions.");
-        toast.error("Could not load rooms.");
+        logAppError("rooms list", snapshotError);
+        setError(getFirestoreErrorMessage(snapshotError, "We couldn't load rooms. Please try again."));
+        toast.error("We couldn't load rooms. Please try again.");
         setLoadingRooms(false);
         if (!cachedRooms) {
           setAllRooms([]);
@@ -97,9 +98,23 @@ const RoomsPage = () => {
       toast.error("Please log in to create a room.");
       return;
     }
+    void router.prefetch("/rooms/[roomId]");
     setIsModalOpen(true);
   };
-  const closeModal = () => setIsModalOpen(false);
+  const closeModal = useCallback(() => setIsModalOpen(false), []);
+
+  const handleRoomCreated = useCallback((room) => {
+    setAllRooms((prev) => {
+      if (prev.some((existing) => existing.id === room.id)) return prev;
+      return [room, ...prev];
+    });
+    if (room.createdBy) {
+      setCreatorUsernames((prev) => ({
+        ...prev,
+        [room.createdBy]: room.createdByUsername || prev[room.createdBy] || "...",
+      }));
+    }
+  }, []);
 
   if (loadingRooms && allRooms.length === 0) {
     return <SkeletonRoomsPage />;
@@ -147,7 +162,7 @@ const RoomsPage = () => {
 
         {error && !loadingRooms && (
           <div className="text-center py-10 text-red-400 bg-secondary rounded-lg shadow">
-            <p>Error loading rooms: {error}</p>
+            <p>{error}</p>
           </div>
         )}
 
@@ -220,10 +235,12 @@ const RoomsPage = () => {
           </div>
         )}
       </main>
-      <CreateRoomModal
-        isOpen={isModalOpen}
-        onClose={closeModal}
-      />
+      {isModalOpen && (
+        <CreateRoomModal
+          onClose={closeModal}
+          onRoomCreated={handleRoomCreated}
+        />
+      )}
     </>
   );
 };

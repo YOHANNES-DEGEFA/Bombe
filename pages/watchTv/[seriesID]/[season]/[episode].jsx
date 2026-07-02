@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
+import { getApiErrorMessage, logAppError } from "../../../../lib/userFacingError";
 import { motion, AnimatePresence } from "framer-motion";
 import EpisodeCard from "../../../../components/EpisodeCard"; // Adjust path
 import SearchCard from "../../../../components/MinimalCard"; // Adjust path
@@ -67,7 +68,7 @@ const TVDetailsModal = ({ onClose, tvShow, cast, creator, trailerKey }) => {
         const [tvShow, setTVShow] = useState(null);
         const [loading, setLoading] = useState(true);
         const [error, setError] = useState(null);
-        useEffect(() => { const fetchTVShow = async () => { setLoading(true); setTVShow(null); setError(null); if (!id || !apiKey || id === "0") { setLoading(false); return; } try { const response = await axios.get(`${BASE_URL}/tv/${id}`, { params: { api_key: apiKey, language: "en-US" }, }); if (response.data) setTVShow(response.data); else throw new Error(`TV Show with ID ${id} not found.`); } catch (err) { console.error("Error in useTVShow:", err); setError(err.message || "Failed to fetch TV show data."); } finally { setLoading(false); } }; if (id && id !== "0") fetchTVShow(); else setLoading(false); }, [id, apiKey]);
+        useEffect(() => { const fetchTVShow = async () => { setLoading(true); setTVShow(null); setError(null); if (!id || !apiKey || id === "0") { setLoading(false); return; } try { const response = await axios.get(`${BASE_URL}/tv/${id}`, { params: { api_key: apiKey, language: "en-US" }, }); if (response.data) setTVShow(response.data); else throw new Error(`TV Show with ID ${id} not found.`); } catch (err) { logAppError("TV show details", err); setError(getApiErrorMessage(err, "We couldn't load this show. Please try again.")); } finally { setLoading(false); } }; if (id && id !== "0") fetchTVShow(); else setLoading(false); }, [id, apiKey]);
         return { tvShow, loading, error };
     };
     const useTVSeasonsEpisodes = (id, seasonNumber, apiKey) => {
@@ -324,8 +325,8 @@ const useTVShow = (id, apiKey, initialTvShow = null) => {
                 if (response.data) setTVShow(response.data);
                 else throw new Error(`TV Show with ID ${id} not found.`);
             } catch (err) {
-                console.error("Error in useTVShow:", err);
-                setError(err.message || "Failed to fetch TV show data.");
+                logAppError("TV show details", err);
+                setError(getApiErrorMessage(err, "We couldn't load this show. Please try again."));
             } finally { setLoading(false); }
         };
         if (id && id !== "0") fetchTVShow();

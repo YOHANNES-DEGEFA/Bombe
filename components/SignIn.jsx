@@ -7,6 +7,7 @@ import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
 import AuthForm from "./AuthForm";
 import toast from 'react-hot-toast';
+import { getAuthErrorMessage, logAppError } from "../lib/userFacingError";
 
 export default function SignIn({ setIsSignUp }) {
   const router = useRouter();
@@ -46,7 +47,9 @@ export default function SignIn({ setIsSignUp }) {
         if (!userDoc.exists()) { const potentialUsername = user.displayName?.replace(/\s+/g, '') || user.email.split("@")[0]; const usernameQuery = query(collection(db, "users"), where("username_lowercase", "==", potentialUsername.toLowerCase())); const usernameSnapshot = await getDocs(usernameQuery); const finalUsername = usernameSnapshot.empty ? potentialUsername : `${potentialUsername}${Math.floor(Math.random() * 1000)}`; await setDoc(userDocRef, { uid: user.uid, username: finalUsername, username_lowercase: finalUsername.toLowerCase(), email: user.email, avatar: user.photoURL || null, createdAt: new Date().toISOString() }); await setDoc(doc(db, "friends", user.uid), { friends: [] }); await setDoc(doc(db, "favorites", user.uid), { movies: [], shows: [], episodes: [] }); await setDoc(doc(db, "history", user.uid), { movies: [], episodes: [] }); await setDoc(doc(db, "watchlists", user.uid), { items: [] }); await setDoc(doc(db, "recommendations", user.uid), { recommendations: [] }); toast.success(`Welcome, ${finalUsername}! Profile created.`);
         } else { toast.success(`Welcome back, ${userDoc.data().username}!`); }
         router.push("/home");
-    } catch (error) { console.error("Google sign-in error:", error); toast.error(`Google Sign-In failed: ${error.message || 'Please try again.'}`); // More robust error message
+    } catch (error) {
+      logAppError("Google sign-in", error);
+      toast.error(getAuthErrorMessage(error, "Google sign-in failed. Please try again."));
     } finally { setIsLoading(false); }
 };
 
