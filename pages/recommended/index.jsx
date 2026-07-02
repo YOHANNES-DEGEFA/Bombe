@@ -11,6 +11,7 @@ import { SkeletonCardGridPage } from "../../components/skeleton";
 import { useRouter } from "next/router";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from 'next/link';
+import { SeoHead } from "../../components/SeoHead";
 import { Toaster } from 'react-hot-toast';
 import { FaChevronDown, FaChevronUp, FaFilm, FaTv } from "react-icons/fa"; // Icons
 
@@ -106,9 +107,9 @@ const useRecommendations = (userId) => {
 
 // Main RecommendedPage component
 const RecommendedPage = () => {
-  const { user: currentUser, loading: authLoading, userId } = useAuth();
+  const { user: currentUser, userId } = useAuth();
   const { recommendations, userUsernames, loading: dataLoading, error } = useRecommendations(userId);
-  const loading = authLoading || dataLoading;
+  const loading = dataLoading;
   const router = useRouter();
   const [expandedShows, setExpandedShows] = useState({});
   const [activeTab, setActiveTab] = useState('movies'); // 'movies' or 'episodes'
@@ -177,9 +178,9 @@ const RecommendedPage = () => {
 
   // --- Main Render ---
   return (
-    <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col font-poppins"> {/* Added mt-16 */}
+    <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col font-poppins">
+      <SeoHead title="Recommended For You" description="Movies and TV shows recommended by your friends on Bombe." canonicalPath="/recommended" noindex />
       <Toaster position="bottom-center" toastOptions={{ className: 'bg-secondary text-textprimary',}} />
-      <NavBar />
       <div className="flex-grow"> {/* pt-16 removed as margin added to outer div */}
          <main className="p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
            <h1 className="text-3xl md:text-4xl font-bold mb-6 text-textprimary">Recommended For You</h1>
@@ -269,7 +270,6 @@ const RecommendedPage = () => {
            </div>
          </main>
        </div>
-      <Footer />
     </div>
   );
 };

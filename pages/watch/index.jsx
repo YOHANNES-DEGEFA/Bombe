@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion"; // Added AnimatePresence
-import NavBar from "../../components/NavBar";
-import Footer from "../../components/Footer";
 import MovieCard from "../../components/MinimalCard";
 import SearchCard from "../../components/MinimalCard";
 import {
@@ -293,7 +291,6 @@ const MovieDetailPage = () => {
           <meta name="description" content={movie?.overview ? movie.overview.substring(0, 160) + "..." : "Discover details about movies on Bombe."} />
         </Head>
         <Toaster position="bottom-center" toastOptions={{ className: "bg-secondary/90 text-textprimary backdrop-blur-md border border-white/10" }} />
-        <NavBar />
 
         {/* Cinematic Backdrop */}
         {movie.backdrop_path && (
@@ -473,7 +470,6 @@ const MovieDetailPage = () => {
         
         {/* Note: Modals intentionally removed as content is now inline */}
         
-        <Footer />
       </div>
   );
 };

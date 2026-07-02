@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import NavBar from "../../components/NavBar";
-import Footer from "../../components/Footer";
 import axios from "axios";
 import MovieCard from "../../components/MinimalCard";
 import { useRouter } from "next/router";
 import { SkeletonSearchPage, SkeletonGrid } from "../../components/skeleton";
+import { SeoHead } from "../../components/SeoHead";
+import { truncateMeta } from "../../lib/seo";
 const BASE_URL = "https://api.themoviedb.org/3";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
 
@@ -19,6 +19,14 @@ const SearchPage = () => {
   const [loading, setLoading] = useState(false);
   const [mostSearched, setMostSearched] = useState([]);
   const [initialLoad, setInitialLoad] = useState(true);
+  useEffect(() => {
+    if (!router.isReady) return;
+    const urlQuery = typeof router.query.q === "string" ? router.query.q : "";
+    if (urlQuery && urlQuery !== query) {
+      setQuery(urlQuery);
+    }
+  }, [router.isReady, router.query.q, query]);
+
   useEffect(() => {
     const fetchGenres = async () => {
       try {
@@ -104,9 +112,21 @@ const SearchPage = () => {
 
   return (
     <div className="min-h-screen bg-primary text-textprimary flex flex-col mt-20">
-      <NavBar />
+      <SeoHead
+        title={query ? `Search: ${query}` : "Search Movies & TV Shows"}
+        description={
+          query
+            ? truncateMeta(`Search results for "${query}" — find movies and TV shows on Bombe.`)
+            : "Search thousands of movies and TV shows. Filter by genre, year, and type to find what to watch next on Bombe."
+        }
+        canonicalPath={query ? `/search?q=${encodeURIComponent(query)}` : "/search"}
+        keywords="search movies, search tv shows, find films, what to watch"
+      />
       <main className="flex-1 p-6">
         <section className="max-w-4xl mx-auto">
+          <h1 className="text-2xl md:text-3xl font-bold mb-6">
+            {query ? `Results for "${query}"` : "Search Movies & TV Shows"}
+          </h1>
           <div className="flex flex-col space-y-4">
             <input
               type="text"
@@ -249,7 +269,6 @@ const SearchPage = () => {
           )}
         </section>
       </main>
-      <Footer />
     </div>
   );
 };

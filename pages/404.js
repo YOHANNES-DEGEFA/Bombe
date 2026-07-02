@@ -1,12 +1,18 @@
-import NavBar from "../components/NavBar";
+import { SeoHead } from "../components/SeoHead";
 
 export default function Custom404() {
-    return (
+  return (
+    <>
+      <SeoHead
+        title="Page Not Found"
+        description="The page you are looking for does not exist. Browse trending movies and TV shows on Bombe."
+        canonicalPath="/404"
+        noindex
+      />
       <div className="text-center pt-24 text-textprimary">
-        <NavBar />
-        {/* <h1>404 - Page Not Found</h1> */}
+        <h1 className="text-2xl font-bold mb-4">404 - Page Not Found</h1>
         <p className="text-md">Oops! The page you’re looking for doesn’t exist.</p>
       </div>
-    );
-  }
-  
+    </>
+  );
+}

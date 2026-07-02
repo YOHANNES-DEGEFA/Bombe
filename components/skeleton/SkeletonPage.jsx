@@ -16,8 +16,8 @@ import { joinClasses } from "./utils";
 
 function SkeletonPageShell({
   children,
-  showNav = true,
-  showFooter = true,
+  showNav = false,
+  showFooter = false,
   className = "",
   mainClassName = "",
 }) {

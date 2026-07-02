@@ -44,6 +44,7 @@ const SearchModal = ({ isOpen, onClose }) => {
 
   // Fetch Genres (keep as is)
   useEffect(() => {
+    if (!isOpen) return;
     const fetchGenres = async () => {
       if (!API_KEY) return; // Don't fetch if no API key
       try {
@@ -68,7 +69,7 @@ const SearchModal = ({ isOpen, onClose }) => {
       }
     };
     fetchGenres();
-  }, [API_KEY]);
+  }, [isOpen]);
 
   // Fetch Trending (keep as is)
   useEffect(() => {

@@ -104,7 +104,7 @@ const TrendingShows = () => {
 
   // Routing - Navigate to TV watch page
   const handleWatch = (showId) => {
-    router.push(`/watchTv?tv_id=${showId}`); // Correct route for TV
+    router.push(`/watchTv/${showId}/1/1`);
   };
 
   // Framer Motion Variants (Identical)
@@ -171,9 +171,9 @@ const TrendingShows = () => {
                 variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
                 className="max-w-lg md:max-w-xl"
                >
-                <motion.h1 variants={textVariants} custom={0} className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-3 drop-shadow-lg leading-tight text-textprimary">
+                <motion.h2 variants={textVariants} custom={0} className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-3 drop-shadow-lg leading-tight text-textprimary">
                   {showDetails.name} {/* Use showDetails name */}
-                </motion.h1>
+                </motion.h2>
 
                  <motion.div variants={textVariants} custom={0.1} className="flex flex-wrap items-center gap-2 mb-3 md:mb-4">
                   {showDetails.genres.slice(0, 3).map((genre) => (

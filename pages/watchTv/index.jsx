@@ -616,7 +616,6 @@ const TVShowPlayerPage = () => {
           <meta name="description" content={tvShow?.overview ? tvShow.overview.substring(0, 160) + '...' : 'Discover details about TV shows on Bombe.'} />
         </Head>
         <Toaster position="bottom-center" toastOptions={{ className: "bg-secondary/90 text-textprimary backdrop-blur-md border border-white/10" }} />
-        <NavBar />
 
         {/* Cinematic Backdrop */}
         {tvShow.backdrop_path && (
@@ -805,7 +804,6 @@ const TVShowPlayerPage = () => {
           </div>
         </main>
 
-        <Footer />
       </div>
   );
 };

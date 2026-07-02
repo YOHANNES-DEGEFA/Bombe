@@ -17,7 +17,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { safeGetDoc, safeGetDocs } from "../../lib/firestore";
-import toast, { Toaster } from "react-hot-toast";
+import { SeoHead } from "../../components/SeoHead";
 import { SkeletonList } from "../../components/skeleton";
 import { useRouter } from "next/router";
 import {
@@ -546,13 +546,12 @@ const BuddiesPage = () => {
   };
 
   return (
-    // Themed background and text
     <div className="min-h-screen bg-primary text-textprimary font-poppins">
+      <SeoHead title="Buddies" description="Connect with friends on Bombe." canonicalPath="/buddies" noindex />
       <toaster
         position="bottom-center"
         toastOptions={{ className: "bg-secondary text-textprimary" }}
       />
-      <NavBar />
       {/* Adjusted padding and max-width */}
       <main className="pt-20 pb-12 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
         {/* Themed heading */}

@@ -887,7 +887,6 @@ const handleRemoveMember = async (memberUidToRemove) => {
         position="bottom-center"
         toastOptions={{ className: "bg-secondary text-textprimary" }}
       />
-      <NavBar />
 
       {/* Background Image */}
       {roomData.currentMediaPoster && (
@@ -1323,7 +1322,6 @@ const handleRemoveMember = async (memberUidToRemove) => {
         </div>{" "}
         {/* End Main Content Flex */}
       </main>
-      <Footer />
     </div>
   );
 };

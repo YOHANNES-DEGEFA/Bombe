@@ -1,12 +1,10 @@
 // pages/history.js
-import React, { useEffect, useState, useMemo } from "react";
-import NavBar from "../../components/NavBar"; // Adjusted path
-import Footer from "../../components/Footer"; // Adjusted path
-import { db } from "../../firebase";
+import React, { useState, useMemo } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { useCachedFirestoreDoc, invalidateFirestoreDocCache } from "../../hooks/useCachedFirestoreDoc";
 import { doc, setDoc } from "firebase/firestore";
-import { safeGetDoc } from "../../lib/firestore";
-import MovieCard from "../../components/MinimalCard"; // Adjusted path
+import { db } from "../../firebase";
+import MovieCard from "../../components/MinimalCard";
 import { SkeletonCardGridPage } from "../../components/skeleton";
 import { useRouter } from "next/router";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,7 +19,7 @@ import {
 } from "react-icons/fa"; // Added Icons
 import toast, { Toaster } from "react-hot-toast";
 import TimeAgo from "react-timeago"; // Import TimeAgo
-import Head from "next/head";
+import { SeoHead } from "../../components/SeoHead";
 const IMAGE_BASE_URL_W500 = "https://image.tmdb.org/t/p/w500";
 
 // Helper function to format date
@@ -42,83 +40,54 @@ const formatDate = (isoString) => {
 };
 
 // Main HistoryPage component
+const DEFAULT_HISTORY = { movies: [], episodes: [] };
+
+function processHistory(rawHistory) {
+  const data = rawHistory || DEFAULT_HISTORY;
+  const uniqueMovies = {};
+  (data.movies || []).forEach((movie) => {
+    if (!movie.id || !movie.watchedAt) return;
+    if (
+      !uniqueMovies[movie.id] ||
+      new Date(movie.watchedAt) > new Date(uniqueMovies[movie.id].watchedAt)
+    ) {
+      uniqueMovies[movie.id] = movie;
+    }
+  });
+  const latestMovies = Object.values(uniqueMovies).sort(
+    (a, b) => new Date(b.watchedAt) - new Date(a.watchedAt)
+  );
+  const uniqueEpisodes = {};
+  (data.episodes || []).forEach((episode) => {
+    if (
+      !episode.tvShowId ||
+      !episode.seasonNumber ||
+      !episode.episodeNumber ||
+      !episode.watchedAt
+    ) return;
+    const episodeKey = `${episode.tvShowId}-${episode.seasonNumber}-${episode.episodeNumber}`;
+    if (
+      !uniqueEpisodes[episodeKey] ||
+      new Date(episode.watchedAt) > new Date(uniqueEpisodes[episodeKey].watchedAt)
+    ) {
+      uniqueEpisodes[episodeKey] = episode;
+    }
+  });
+  const latestEpisodes = Object.values(uniqueEpisodes).sort(
+    (a, b) => new Date(b.watchedAt) - new Date(a.watchedAt)
+  );
+  return { movies: latestMovies, episodes: latestEpisodes };
+}
+
 const HistoryPage = () => {
-  const [history, setHistory] = useState({ movies: [], episodes: [] });
-  const [dataLoading, setDataLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [expandedShows, setExpandedShows] = useState({});
   const [activeTab, setActiveTab] = useState("movies");
 
-  const { user: currentUser, loading: authLoading, userId } = useAuth();
-  const loading = authLoading || dataLoading;
+  const { user: currentUser, userId } = useAuth();
+  const { data: rawHistory, loading: dataLoading, error, refresh } = useCachedFirestoreDoc("history", userId, DEFAULT_HISTORY);
+  const history = useMemo(() => processHistory(rawHistory), [rawHistory]);
+  const loading = dataLoading;
   const router = useRouter();
-
-  // Fetch and process history
-  useEffect(() => {
-    if (authLoading) return;
-
-    const fetchHistory = async () => {
-      setDataLoading(true);
-      setError(null);
-      if (!userId) {
-        setHistory({ movies: [], episodes: [] });
-        setDataLoading(false);
-        return;
-      }
-      try {
-        const historyRef = doc(db, "history", userId);
-        const historyDoc = await safeGetDoc(historyRef);
-        let latestMovies = [];
-        let latestEpisodes = [];
-        if (historyDoc?.exists()) {
-          const data = historyDoc.data();
-          const uniqueMovies = {};
-          (data.movies || []).forEach((movie) => {
-            if (!movie.id || !movie.watchedAt) return;
-            if (
-              !uniqueMovies[movie.id] ||
-              new Date(movie.watchedAt) >
-                new Date(uniqueMovies[movie.id].watchedAt)
-            ) {
-              uniqueMovies[movie.id] = movie;
-            }
-          });
-          latestMovies = Object.values(uniqueMovies).sort(
-            (a, b) => new Date(b.watchedAt) - new Date(a.watchedAt)
-          );
-          const uniqueEpisodes = {};
-          (data.episodes || []).forEach((episode) => {
-            if (
-              !episode.tvShowId ||
-              !episode.seasonNumber ||
-              !episode.episodeNumber ||
-              !episode.watchedAt
-            )
-              return;
-            const episodeKey = `${episode.tvShowId}-${episode.seasonNumber}-${episode.episodeNumber}`;
-            if (
-              !uniqueEpisodes[episodeKey] ||
-              new Date(episode.watchedAt) >
-                new Date(uniqueEpisodes[episodeKey].watchedAt)
-            ) {
-              uniqueEpisodes[episodeKey] = episode;
-            }
-          });
-          latestEpisodes = Object.values(uniqueEpisodes).sort(
-            (a, b) => new Date(b.watchedAt) - new Date(a.watchedAt)
-          );
-        }
-        setHistory({ movies: latestMovies, episodes: latestEpisodes });
-      } catch (err) {
-        console.error("Error fetching history:", err);
-        setError(err.message || "Failed to load history.");
-        setHistory({ movies: [], episodes: [] });
-      } finally {
-        setDataLoading(false);
-      }
-    };
-    fetchHistory();
-  }, [userId, authLoading]);
 
   // Clear History Function
   const clearHistory = async () => {
@@ -128,7 +97,8 @@ const HistoryPage = () => {
     const historyRef = doc(db, "history", userId);
     try {
       await setDoc(historyRef, { movies: [], episodes: [] });
-      setHistory({ movies: [], episodes: [] });
+      invalidateFirestoreDocCache("history", userId);
+      refresh();
       toast.success("Watch history cleared.");
     } catch (err) {
       console.error("Error clearing history:", err);
@@ -185,27 +155,23 @@ const HistoryPage = () => {
   }
   if (error) {
     return (
-      <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4">
-        {" "}
-        <NavBar />{" "}
+      <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]">
         <div className="text-center">
           <h2 className="text-2xl text-red-500 mb-4">Error Loading History</h2>
           <p className="text-textsecondary mb-6">{error}</p>
-        </div>{" "}
-        <Footer />{" "}
+        </div>
       </div>
     );
   }
   if (!currentUser) {
     return (
-      <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4">
-        {" "}
-        <Head>
-          <title>My History | Bombe</title>
-          <meta name="description" content="View your collection of Privious  movies and TV show episodes. Your curated list of top picks on Bombe." />
-          <meta name="keywords" content="History, Past movies, Privious tv shows, liked, Bombe" />
-        </Head>
-        <NavBar />{" "}
+      <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]">
+        <SeoHead
+          title="My History"
+          description="View your collection of previously watched movies and TV show episodes."
+          canonicalPath="/history"
+          noindex
+        />
         <div className="text-center">
           <h2 className="text-2xl text-accent mb-4">Log In Required</h2>
           <p className="text-textsecondary mb-6">
@@ -217,23 +183,24 @@ const HistoryPage = () => {
           >
             Log In
           </button>
-        </div>{" "}
-        <Footer />{" "}
+        </div>
       </div>
     );
   }
 
-  // --- Main Render ---
   return (
-    // Added mt-16
-    <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col font-poppins">
+    <>
+      <SeoHead
+        title="Watch History"
+        description="View your collection of previously watched movies and TV show episodes."
+        canonicalPath="/history"
+        noindex
+      />
       <Toaster
         position="bottom-center"
         toastOptions={{ className: "bg-secondary text-textprimary" }}
       />
-      <NavBar />
-      <div className="flex-grow">
-        <main className="p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
+      <main className="p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
           {/* Header Row */}
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <h1 className="text-3xl md:text-4xl font-bold text-textprimary">
@@ -290,6 +257,7 @@ const HistoryPage = () => {
                         <MovieCard
                           movie={movie}
                           onClick={() => router.push(`/watch?movie_id=${movie.id}`)}
+                          skipDetailFetch
                         />
                         <p
                           className="text-xs mt-1.5 text-textsecondary text-center"
@@ -434,11 +402,8 @@ const HistoryPage = () => {
             )}
           </div>
         </main>
-      </div>{" "}
-      {/* End flex-grow wrapper */}
-      <Footer />
-    </div> // <-- Added closing parenthesis here
-  ); // <-- Added closing parenthesis here
+    </>
+  );
 };
 
 export default HistoryPage;

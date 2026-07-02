@@ -12,6 +12,7 @@ import StatsCard from "../../components/StatsCard"; // Adjust path
 import { SkeletonProfilePage } from "../../components/skeleton";
 import toast, { Toaster } from 'react-hot-toast'; // For feedback
 import { FaEdit, FaSave, FaSignOutAlt } from "react-icons/fa"; // Icons
+import { SeoHead } from "../../components/SeoHead";
 import { motion } from "framer-motion";
 // Genre Map (Ensure this covers IDs present in your data, including TV genres)
 const genreMap = {
@@ -190,10 +191,9 @@ export default function Profile() {
 
   // --- Main Render ---
   return (
-    // Added mt-16 for spacing below NavBar
     <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center p-4 md:p-6 font-poppins">
+      <SeoHead title="Profile" description="Manage your Bombe profile and preferences." canonicalPath="/profile" noindex />
       <Toaster position="bottom-center" toastOptions={{ className: 'bg-secondary text-textprimary',}} />
-      <NavBar />
        {/* Main Profile Card - Themed */}
       <div className="bg-secondary p-6 md:p-8 rounded-xl shadow-lg w-full max-w-3xl border border-secondary-light flex flex-col items-center">
         <h1 className="text-3xl font-bold mb-6 text-textprimary">Profile</h1>

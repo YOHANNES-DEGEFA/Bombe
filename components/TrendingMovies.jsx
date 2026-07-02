@@ -100,7 +100,7 @@ const TrendingMovies = () => {
   const handlers = useSwipeable({ onSwipedLeft: () => paginate(1), onSwipedRight: () => paginate(-1), preventDefaultTouchmoveEvent: true, trackMouse: true, });
 
   // Routing (keep as is)
-  const handleWatch = (movieId) => { router.push(`/watch?movie_id=${movieId}`); };
+  const handleWatch = (movieId) => { router.push(`/movie/${movieId}`); };
 
   // Framer Motion Variants (keep as is)
   const variants = { enter: (direction) => ({ x: direction > 0 ? "100%" : "-100%", opacity: 0 }), center: { zIndex: 1, x: 0, opacity: 1 }, exit: (direction) => ({ zIndex: 0, x: direction < 0 ? "100%" : "-100%", opacity: 0 }), };
@@ -167,9 +167,9 @@ const TrendingMovies = () => {
                 variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
                 className="max-w-lg md:max-w-xl"
                >
-                <motion.h1 variants={textVariants} custom={0} className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-3 drop-shadow-lg leading-tight text-textprimary"> {/* Themed text */}
+                <motion.h2 variants={textVariants} custom={0} className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-3 drop-shadow-lg leading-tight text-textprimary">
                   {movieDetails.title}
-                </motion.h1>
+                </motion.h2>
 
                  <motion.div variants={textVariants} custom={0.1} className="flex flex-wrap items-center gap-2 mb-3 md:mb-4">
                   {movieDetails.genres.slice(0, 3).map((genre) => (

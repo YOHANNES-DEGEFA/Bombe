@@ -1,15 +1,15 @@
 // pages/index.js or pages/home.js (or wherever MovieList is)
 import { useEffect, useState } from "react";
-import MovieCard from "../../components/MinimalCard"; // Adjust path
-import NavBar from "../../components/NavBar";       // Adjust path
-import Footer from "../../components/Footer";       // Adjust path
-import TrendingMovies from "../../components/TrendingMovies"; // Adjust path
-import TrendingShows from "../../components/TrendingShows";   // Adjust path
+import MovieCard from "../../components/MinimalCard";
+import TrendingMovies from "../../components/TrendingMovies";
+import TrendingShows from "../../components/TrendingShows";
 import { FaFire, FaStar } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useRouter } from "next/router";
 import { tmdbGet } from "../../lib/tmdb";
 import { SkeletonHomePage } from "../../components/skeleton";
+import { SeoHead } from "../../components/SeoHead";
+import { buildWebSiteJsonLd } from "../../lib/seo";
 
 const MovieList = () => {
   const [trendingMovies, setTrendingMovies] = useState([]);
@@ -109,6 +109,7 @@ const MovieList = () => {
               <MovieCard
                 movie={{ ...item, media_type: mediaType }}
                 media_type={mediaType}
+                skipDetailFetch
               />
             </motion.div>
           ))}
@@ -125,43 +126,31 @@ const MovieList = () => {
   }
 
   return (
+    <>
+      <SeoHead
+        title="Discover Trending Movies & TV Shows"
+        description="Browse trending movies and TV shows, top-rated picks, and personalized recommendations. Your home for streaming discovery on Bombe."
+        canonicalPath="/home"
+        keywords="trending movies, popular tv shows, top rated films, streaming, watch online"
+        jsonLd={buildWebSiteJsonLd()}
+      />
+      <h1 className="sr-only">Discover Trending Movies and TV Shows on Bombe</h1>
+      <TrendingMovies />
 
-    // Themed background and text
-    <div className="bg-primary text-textprimary min-h-screen flex flex-col font-poppins">
+      <main className="md:py-10 max-w-full mx-auto">
+         {error && (
+           <div className="mb-8 p-4 bg-red-900/30 border border-red-700/50 text-red-300 rounded-md text-center">
+             Error loading some sections: {error}
+           </div>
+         )}
 
-      <NavBar />
-
-      {/* Wrapper with pt-16 to offset fixed NavBar */}
-      <div className="flex-grow">
-
-        {/* Hero Sections - Assuming these have mt-16 internally */}
-        {/* If not, remove pt-16 above and add mt-16 to these two */}
-        <TrendingMovies />
-        
-
-        {/* Main content area with padding */}
-        <main className="md:py-10 max-w-full mx-auto">
-           {error && ( // Themed error display
-             <div className="mb-8 p-4 bg-red-900/30 border border-red-700/50 text-red-300 rounded-md text-center">
-               Error loading some sections: {error}
-             </div>
-           )}
-
-            {/* Carousel Sections */}
-            <CarouselSection title="Trending Movies" icon={FaFire} data={trendingMovies} mediaType="movie" />
-            <CarouselSection title="Highest Rated Movies" icon={FaStar} data={highestRatedMovies} mediaType="movie" />
-            <TrendingShows />
-            <CarouselSection title="Trending Shows" icon={FaFire} data={trendingShows} mediaType="tv" />
-            <CarouselSection title="Highest Rated Shows" icon={FaStar} data={highestRatedShows} mediaType="tv" />
-
-            {/* Add Most Watched/Popular section if desired */}
-            {/* <CarouselSection title="Most Popular Movies" icon={FaEye} data={mostWatchedMovies} mediaType="movie" /> */}
-
-        </main>
-      </div>
-
-      <Footer />
-    </div>
+          <CarouselSection title="Trending Movies" icon={FaFire} data={trendingMovies} mediaType="movie" />
+          <CarouselSection title="Highest Rated Movies" icon={FaStar} data={highestRatedMovies} mediaType="movie" />
+          <TrendingShows />
+          <CarouselSection title="Trending Shows" icon={FaFire} data={trendingShows} mediaType="tv" />
+          <CarouselSection title="Highest Rated Shows" icon={FaStar} data={highestRatedShows} mediaType="tv" />
+      </main>
+    </>
   );
 };
 

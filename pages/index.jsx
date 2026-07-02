@@ -1,35 +1,25 @@
-// pages/index.js (Auth Page)
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Slideshow from "../components/Slideshow"; // Adjusted path
-import { auth } from "../firebase"; // Adjusted path
-import { onAuthStateChanged } from "firebase/auth";
-import SignIn from "../components/SignIn"; // Adjusted path
-import SignUp from "../components/SignUp"; // Adjusted path
+import Slideshow from "../components/Slideshow";
+import SignIn from "../components/SignIn";
+import SignUp from "../components/SignUp";
 import Head from "next/head";
-import { motion, AnimatePresence } from "framer-motion"; // Import motion
+import { motion, AnimatePresence } from "framer-motion";
 import { SkeletonAuthPage } from "../components/skeleton";
+import { useAuth } from "../hooks/useAuth";
 
 export default function Home() {
-  const [isSignUp, setIsSignUp] = useState(true); // Default to Sign Up
-  const [user, setUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false); // Track if initial auth check is done
+  const [isSignUp, setIsSignUp] = useState(true);
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthChecked(true); // Mark auth check as complete
-      // Redirect logged-in users away from auth page
-      if (currentUser) {
-        router.replace("/home"); // Use replace to avoid auth page in history
-      }
-    });
-    return () => unsubscribe();
-  }, [router]); // Add router to dependencies
+    if (!authLoading && user) {
+      router.replace("/home");
+    }
+  }, [authLoading, user, router]);
 
-  // Show loading or null until auth state is confirmed AND user is not logged in
-  if (!authChecked || user) {
+  if (authLoading || user) {
     return <SkeletonAuthPage />;
   }
 

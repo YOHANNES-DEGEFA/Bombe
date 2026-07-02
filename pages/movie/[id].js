@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion"; // Added AnimatePresence
-import NavBar from "../../components/NavBar";
-import Footer from "../../components/Footer";
 import MovieCard from "../../components/MinimalCard";
 import {
     FaStar,
@@ -26,7 +24,16 @@ import {
 import { SkeletonDetailPage } from "../../components/skeleton";
 import toast, { Toaster } from "react-hot-toast";
 import { IoClose } from "react-icons/io5";
-import Head from "next/head"; // <-- IMPORTED Head
+import { SeoHead } from "../../components/SeoHead";
+import {
+  buildBreadcrumbJsonLd,
+  buildCanonicalUrl,
+  buildMovieJsonLd,
+  buildMoviePath,
+  getTmdbImageUrl,
+  truncateMeta,
+} from "../../lib/seo";
+import { fetchTmdb } from "../../lib/tmdbServer";
 
 const BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL_W500 = "https://image.tmdb.org/t/p/w500";
@@ -242,15 +249,15 @@ const RecommendationsModal = ({ onClose, recommendedMovies, router }) => {
 
 
 // --- Main Component ---
-const MovieDetailPage = () => {
+const MovieDetailPage = ({ initialMovie = null }) => {
     const router = useRouter();
     const { id: id } = router.query;
     const apiKey = process.env.NEXT_PUBLIC_API_KEY;
 
     const isRouterReady = router.isReady;
-    const validId = isRouterReady ? id || null : null;
+    const validId = isRouterReady ? id || null : (initialMovie?.id ? String(initialMovie.id) : null);
 
-    const { movie, loading: loadingMovie, error } = useMovie(validId, apiKey);
+    const { movie, loading: loadingMovie, error } = useMovie(validId, apiKey, initialMovie);
     const { recommendedMovies } = useRecommendedMovies(validId, apiKey);
     const { cast, trailerKey, director } = useAdditionalDetails(movie, apiKey);
 
@@ -276,30 +283,37 @@ const MovieDetailPage = () => {
     useEffect(() => { const saveToHistory = async () => { if (!currentUser || !movie || !movie.id || !movie.title) return; const historyRef = doc(db, "history", currentUser.uid); const movieData = { id: movie.id, title: movie.title, poster_path: movie.poster_path, watchedAt: new Date().toISOString(), type: "movie", }; try { const historyDoc = await getDoc(historyRef); if (historyDoc.exists()) { const recentMovies = (historyDoc.data().movies || []).slice(-5); if (!recentMovies.some((m) => m.id === movie.id)) await updateDoc(historyRef, { movies: arrayUnion(movieData) }); } else { await setDoc(historyRef, { movies: [movieData], episodes: [] }); } } catch (err) { console.error("Error saving to history:", err); } }; if (movie?.id) saveToHistory(); }, [movie, currentUser]);
 
     // --- Render States (No Changes) ---
-    if (!isRouterReady || loadingMovie) { return <SkeletonDetailPage />; }
+    if ((!isRouterReady && !initialMovie) || loadingMovie) { return <SkeletonDetailPage />; }
     if (error) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center mt-20"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Movie</h2> <p className="text-textsecondary mb-6">{error}</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
     if (!movie) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center mt-20"> <h2 className="text-2xl text-yellow-500 mb-4">Movie Not Found</h2> <p className="text-textsecondary mb-6">The requested movie could not be found.</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
+
+    const movieYear = movie?.release_date?.substring(0, 4);
+    const movieTitle = movie ? `${movie.title}${movieYear ? ` (${movieYear})` : ""}` : "Movie Details";
+    const movieDescription = truncateMeta(movie?.overview, 160);
+    const canonicalPath = movie ? buildMoviePath(movie.id) : router.asPath.split("?")[0];
+    const ogImage = getTmdbImageUrl(movie?.poster_path);
+    const movieJsonLd = movie
+      ? [
+          buildMovieJsonLd(movie, buildCanonicalUrl(canonicalPath)),
+          buildBreadcrumbJsonLd([
+            { name: "Home", url: buildCanonicalUrl("/home") },
+            { name: movie.title, url: buildCanonicalUrl(canonicalPath) },
+          ]),
+        ]
+      : null;
 
     // --- Main Render (UPDATED) ---
     return (
         <div className="min-h-screen bg-primary text-textprimary flex flex-col font-poppins">
-            <Head>
-                <title>{movie ? `${movie.title} (${movie.release_date?.substring(0,4)}) - Bombe` : "Movie Details - Bombe"}</title>
-                <meta name="description" content={movie?.overview ? movie.overview.substring(0, 160) + "..." : "Discover details about movies on Bombe."} />
-                <link rel="canonical" href={`httpsg://Bombe.vercel.app/${router.asPath}`} /> {/* Use your site URL */}
-                <meta property="og:type" content="video.movie" />
-                <meta property="og:title" content={movie ? `${movie.title} (${movie.release_date?.substring(0,4)}) - Bombe` : "Movie Details - Bombe"} />
-                <meta property="og:description" content={movie?.overview ? movie.overview.substring(0, 160) + "..." : "Discover details about movies on Bombe."} />
-                {movie?.poster_path && ( <meta property="og:image" content={`https://image.tmdb.org/t/p/w500${movie.poster_path}`} /> )}
-                <meta property="og:url" content={`https://Bombe.vercel.app/${router.asPath}`} /> {/* Use your site URL */}
-                <meta property="og:site_name" content="Bombe" />
-                <meta name="twitter:card" content="summary_large_image" />
-                <meta name="twitter:title" content={movie ? `${movie.title} (${movie.release_date?.substring(0,4)}) - Bombe` : "Movie Details - Bombe"} />
-                <meta name="twitter:description" content={movie?.overview ? movie.overview.substring(0, 160) + "..." : "Discover details about movies on Bombe."} />
-                {movie?.poster_path && ( <meta name="twitter:image" content={`https://image.tmdb.org/t/p/w500${movie.poster_path}`} /> )}
-            </Head>
+            <SeoHead
+                title={movieTitle}
+                description={movieDescription}
+                canonicalPath={canonicalPath}
+                ogType="video.movie"
+                ogImage={ogImage}
+                jsonLd={movieJsonLd}
+            />
             <Toaster position="bottom-center" toastOptions={{ className: "bg-secondary text-textprimary" }} />
-            <NavBar />
 
             {/* Blurred Backdrop */}
             {movie.backdrop_path && (
@@ -527,18 +541,23 @@ const MovieDetailPage = () => {
                 )}
             </AnimatePresence>
 
-            <Footer />
         </div>
     );
 };
 
 // --- Custom Hooks (Paste your existing hook code here) ---
-const useMovie = (id, apiKey) => {
-    const [movie, setMovie] = useState(null);
-    const [loading, setLoading] = useState(true);
+const useMovie = (id, apiKey, initialMovie = null) => {
+    const [movie, setMovie] = useState(initialMovie);
+    const [loading, setLoading] = useState(!initialMovie);
     const [error, setError] = useState(null);
     useEffect(() => {
         const fetchMovie = async () => {
+            if (initialMovie && String(initialMovie.id) === String(id)) {
+                setMovie(initialMovie);
+                setLoading(false);
+                setError(null);
+                return;
+            }
             setLoading(true); setMovie(null); setError(null);
             if (!id || !apiKey || id === '0') { setLoading(false); return; }
             try {
@@ -550,7 +569,7 @@ const useMovie = (id, apiKey) => {
         };
         if (id && id !== '0') fetchMovie();
         else setLoading(false);
-    }, [id, apiKey]);
+    }, [id, apiKey, initialMovie]);
     return { movie, loading, error };
 };
 
@@ -597,3 +616,17 @@ const useAdditionalDetails = (movie, apiKey) => {
 // --- End Custom Hooks ---
 
 export default MovieDetailPage;
+
+export async function getServerSideProps({ params }) {
+    const movie = await fetchTmdb(`movie/${params.id}`, { language: "en-US" });
+
+    if (!movie?.id) {
+        return { notFound: true };
+    }
+
+    return {
+        props: {
+            initialMovie: movie,
+        },
+    };
+}

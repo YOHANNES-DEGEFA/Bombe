@@ -17,6 +17,7 @@ import CreateRoomModal from "../../components/CreateRoomModal"; // Adjust path
 import { SkeletonRoomsPage } from "../../components/skeleton";
 import { FaPlus, FaUsers, FaClock, FaCrown } from "react-icons/fa";
 import TimeAgo from "react-timeago"; // <-- Import TimeAgo
+import { SeoHead } from "../../components/SeoHead";
 import toast, { Toaster } from "react-hot-toast";
 import { motion } from "framer-motion";
 import { useRouter } from "next/router"; // <-- Import useRouter
@@ -162,13 +163,12 @@ const RoomsPage = () => {
 
   // --- Main Render ---
   return (
-    // Added mt-16 for spacing below NavBar, themed background/text
     <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col font-poppins">
+      <SeoHead title="Watch Party Rooms" description="Create and join watch party rooms on Bombe." canonicalPath="/rooms" noindex />
       <Toaster
         position="bottom-center"
         toastOptions={{ className: "bg-secondary text-textprimary" }}
       />
-      <NavBar />
       {/* Removed pt-16 from main as mt-16 is on outer div */}
       <main className="flex-1 container mx-auto p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8">
         {/* Header + Create Button - Themed */}
@@ -272,7 +272,6 @@ const RoomsPage = () => {
         currentUser={currentUser}
         setError={setError}
       />
-      <Footer />
     </div>
   );
 };

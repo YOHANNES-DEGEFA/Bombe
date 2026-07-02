@@ -29,7 +29,16 @@ import {
 import { SkeletonWatchTvPage, SkeletonEpisodeStrip } from "../../../../components/skeleton";
 import toast, { Toaster } from "react-hot-toast";
 import { IoClose } from "react-icons/io5";
-import Head from 'next/head';
+import { SeoHead } from "../../../../components/SeoHead";
+import {
+  buildBreadcrumbJsonLd,
+  buildCanonicalUrl,
+  buildTvEpisodeJsonLd,
+  buildTvPath,
+  getTmdbImageUrl,
+  truncateMeta,
+} from "../../../../lib/seo";
+import { fetchTmdb } from "../../../../lib/tmdbServer";
 
 const BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL_W500 = "https://image.tmdb.org/t/p/w500";
@@ -298,11 +307,32 @@ const TVEpisodesModal = ({ onClose, tvShow, seasons, selectedSeason, handleSeaso
 
 
 // --- Custom Hooks (Copied from your file) ---
-const useTVShow = (id, apiKey) => {
-    const [tvShow, setTVShow] = useState(null);
-    const [loading, setLoading] = useState(true);
+const useTVShow = (id, apiKey, initialTvShow = null) => {
+    const [tvShow, setTVShow] = useState(initialTvShow);
+    const [loading, setLoading] = useState(!initialTvShow);
     const [error, setError] = useState(null);
-    useEffect(() => { const fetchTVShow = async () => { setLoading(true); setTVShow(null); setError(null); if (!id || !apiKey || id === "0") { setLoading(false); return; } try { const response = await axios.get(`${BASE_URL}/tv/${id}`, { params: { api_key: apiKey, language: "en-US" }, }); if (response.data) setTVShow(response.data); else throw new Error(`TV Show with ID ${id} not found.`); } catch (err) { console.error("Error in useTVShow:", err); setError(err.message || "Failed to fetch TV show data."); } finally { setLoading(false); } }; if (id && id !== "0") fetchTVShow(); else setLoading(false); }, [id, apiKey]);
+    useEffect(() => {
+        const fetchTVShow = async () => {
+            if (initialTvShow && String(initialTvShow.id) === String(id)) {
+                setTVShow(initialTvShow);
+                setLoading(false);
+                setError(null);
+                return;
+            }
+            setLoading(true); setTVShow(null); setError(null);
+            if (!id || !apiKey || id === "0") { setLoading(false); return; }
+            try {
+                const response = await axios.get(`${BASE_URL}/tv/${id}`, { params: { api_key: apiKey, language: "en-US" }, });
+                if (response.data) setTVShow(response.data);
+                else throw new Error(`TV Show with ID ${id} not found.`);
+            } catch (err) {
+                console.error("Error in useTVShow:", err);
+                setError(err.message || "Failed to fetch TV show data.");
+            } finally { setLoading(false); }
+        };
+        if (id && id !== "0") fetchTVShow();
+        else setLoading(false);
+    }, [id, apiKey, initialTvShow]);
     return { tvShow, loading, error };
 };
 const useTVSeasonsEpisodes = (id, seasonNumber, apiKey) => {
@@ -362,24 +392,23 @@ const useTVAdditionalDetails = (tvShow, apiKey) => {
 };
 
 // --- Main Component ---
-const TVShowPlayerPage = () => {
+const TVShowPlayerPage = ({ initialTvShow = null, initialSeason = 1, initialEpisode = 1 }) => {
     const router = useRouter();
-    const { seriesID: id, season, episode } = router.query; // Get S/E from URL
+    const { seriesID: id, season, episode } = router.query;
     const apiKey = process.env.NEXT_PUBLIC_API_KEY;
 
     const isRouterReady = router.isReady;
-    const validId = isRouterReady ? id || null : null;
+    const validId = isRouterReady ? id || null : (initialTvShow?.id ? String(initialTvShow.id) : null);
 
-    const { tvShow, loading: loadingShow, error } = useTVShow(validId, apiKey);
+    const { tvShow, loading: loadingShow, error } = useTVShow(validId, apiKey, initialTvShow);
     const { recommendedShows } = useRecommendedShows(validId, apiKey);
     const { cast, trailerKey, creator } = useTVAdditionalDetails(tvShow, apiKey);
 
     // State for selected S/E (player state)
-    const [selectedSeason, setSelectedSeason] = useState(1);
-    const [selectedEpisode, setSelectedEpisode] = useState(1);
+    const [selectedSeason, setSelectedSeason] = useState(initialSeason);
+    const [selectedEpisode, setSelectedEpisode] = useState(initialEpisode);
 
-    // Use a separate state for the modal's viewed season
-    const [modalViewSeason, setModalViewSeason] = useState(1);
+    const [modalViewSeason, setModalViewSeason] = useState(initialSeason);
     const { episodes, loadingEpisodes } = useTVSeasonsEpisodes(
         validId,
         modalViewSeason, // Fetch episodes based on what modal is viewing
@@ -613,19 +642,36 @@ const TVShowPlayerPage = () => {
 
 
     // --- Render States (Themed) ---
-    if (!isRouterReady || loadingShow) { return <SkeletonWatchTvPage />; }
+    if ((!isRouterReady && !initialTvShow) || loadingShow) { return <SkeletonWatchTvPage />; }
     if (error) { return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Show</h2> <p className="text-textsecondary mb-6">{error}</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
     if (!tvShow) { return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-yellow-500 mb-4">TV Show Not Found</h2> <p className="text-textsecondary mb-6">The requested TV show could not be found.</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
 
     // --- Main Render (UPDATED) ---
+    const tvTitle = tvShow ? `${tvShow.name} (S${selectedSeason} E${selectedEpisode})` : "TV Show Details";
+    const tvDescription = truncateMeta(tvShow?.overview, 160);
+    const canonicalPath = tvShow ? buildTvPath(tvShow.id, selectedSeason, selectedEpisode) : router.asPath.split("?")[0];
+    const ogImage = getTmdbImageUrl(tvShow?.poster_path);
+    const tvJsonLd = tvShow
+      ? [
+          buildTvEpisodeJsonLd(tvShow, selectedSeason, selectedEpisode, buildCanonicalUrl(canonicalPath)),
+          buildBreadcrumbJsonLd([
+            { name: "Home", url: buildCanonicalUrl("/home") },
+            { name: tvShow.name, url: buildCanonicalUrl(canonicalPath) },
+          ]),
+        ]
+      : null;
+
     return (
         <div className="min-h-screen bg-primary text-textprimary flex flex-col font-poppins selection:bg-accent/30">
-            <Head>
-                <title>{tvShow ? `${tvShow.name} (S${selectedSeason} E${selectedEpisode}) - Bombe` : 'TV Show Details - Bombe'}</title>
-                <meta name="description" content={tvShow?.overview ? tvShow.overview.substring(0, 160) + '...' : 'Discover details about TV shows on Bombe.'} />
-            </Head>
+            <SeoHead
+                title={tvTitle}
+                description={tvDescription}
+                canonicalPath={canonicalPath}
+                ogType="video.tv_show"
+                ogImage={ogImage}
+                jsonLd={tvJsonLd}
+            />
             <Toaster position="bottom-center" toastOptions={{ className: "bg-secondary/90 text-textprimary backdrop-blur-md border border-white/10" }} />
-            <NavBar />
 
             {/* Cinematic Backdrop */}
             {tvShow.backdrop_path && (
@@ -813,10 +859,25 @@ const TVShowPlayerPage = () => {
                     )}
                 </div>
             </main>
-            <Footer />
         </div>
     );
 };
 
 
 export default TVShowPlayerPage;
+
+export async function getServerSideProps({ params }) {
+    const tvShow = await fetchTmdb(`tv/${params.seriesID}`, { language: "en-US" });
+
+    if (!tvShow?.id) {
+        return { notFound: true };
+    }
+
+    return {
+        props: {
+            initialTvShow: tvShow,
+            initialSeason: parseInt(params.season, 10) || 1,
+            initialEpisode: parseInt(params.episode, 10) || 1,
+        },
+    };
+}
