@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { db } from "../../firebase";
 import { useAuth } from "../../hooks/useAuth";
-import NavBar from "../../components/NavBar"; // Assuming NavBar component exists
 import {
   doc,
   setDoc,
@@ -16,10 +15,15 @@ import {
   onSnapshot,
   limit,
 } from "firebase/firestore";
-import { safeGetDoc, safeGetDocs } from "../../lib/firestore";
-import toast, { Toaster } from "react-hot-toast";
+import { safeGetDocs } from "../../lib/firestore";
+import { getCachedUser } from "../../lib/cachedUsers";
+import { getCachedUsersDirectory } from "../../lib/cachedUsersDirectory";
+import { CACHE_TTL, getMemoryCached, setMemoryCached } from "../../lib/memoryCache";
+import { invalidateBuddiesCache } from "../../lib/buddiesCache";
+import { SeoHead } from "../../components/SeoHead";
 import { SkeletonList } from "../../components/skeleton";
 import { useRouter } from "next/router";
+import toast, { Toaster } from "react-hot-toast";
 import {
   FaUserPlus,
   FaUserCheck,
@@ -156,26 +160,38 @@ const UserListItem = ({
 // --- End UserListItem ---
 
 const BuddiesPage = () => {
-  const [friends, setFriends] = useState([]);
-  const [friendRequests, setFriendRequests] = useState([]);
+  const { user: currentUser, userId } = useAuth();
+  const router = useRouter();
+
+  const friendsCacheKey = userId ? `buddies:friends:${userId}` : null;
+  const requestsCacheKey = userId ? `buddies:requests:${userId}` : null;
+  const sentCacheKey = userId ? `buddies:sent:${userId}` : null;
+
+  const [friends, setFriends] = useState(() =>
+    friendsCacheKey ? getMemoryCached(friendsCacheKey, CACHE_TTL.firestore) || [] : []
+  );
+  const [friendRequests, setFriendRequests] = useState(() =>
+    requestsCacheKey ? getMemoryCached(requestsCacheKey, CACHE_TTL.firestore) || [] : []
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [sentRequests, setSentRequests] = useState({});
+  const [loading, setLoading] = useState(() => {
+    if (!userId) return false;
+    const hasFriendsCache = friendsCacheKey && getMemoryCached(friendsCacheKey, CACHE_TTL.firestore);
+    const hasRequestsCache = requestsCacheKey && getMemoryCached(requestsCacheKey, CACHE_TTL.firestore);
+    return !(hasFriendsCache && hasRequestsCache);
+  });
+  const [sentRequests, setSentRequests] = useState(() =>
+    sentCacheKey ? getMemoryCached(sentCacheKey, CACHE_TTL.firestore) || {} : {}
+  );
   const [interactionLoading, setInteractionLoading] = useState({});
   const [activeTab, setActiveTab] = useState("friends");
 
-  const { user: currentUser, loading: authLoading, userId } = useAuth();
-  const router = useRouter();
-
-  // Data Fetching (Keep as is, uses onSnapshot)
   useEffect(() => {
-    if (authLoading) return;
     if (!userId) {
       setLoading(false);
       return;
     }
-    setLoading(true);
     let combinedLoading = { friends: true, requests: true, sent: true };
     const updateCombinedLoading = (key, value) => {
       combinedLoading[key] = value;
@@ -193,18 +209,14 @@ const BuddiesPage = () => {
       async (docSnap) => {
         if (docSnap.exists()) {
           const friendIds = docSnap.data().friends || [];
-          const friendsData = await Promise.all(
-            friendIds.map(async (friendId) => {
-              const userDocRef = doc(db, "users", friendId);
-              const userDoc = await safeGetDoc(userDocRef);
-              return userDoc?.exists()
-                ? { uid: friendId, ...userDoc.data() }
-                : null;
-            })
-          );
-          setFriends(friendsData.filter(Boolean));
+          const friendsData = (
+            await Promise.all(friendIds.map((friendId) => getCachedUser(friendId)))
+          ).filter(Boolean);
+          setFriends(friendsData);
+          if (friendsCacheKey) setMemoryCached(friendsCacheKey, friendsData, CACHE_TTL.firestore);
         } else {
           setFriends([]);
+          if (friendsCacheKey) setMemoryCached(friendsCacheKey, [], CACHE_TTL.firestore);
         }
         updateCombinedLoading("friends", false);
       },
@@ -221,22 +233,24 @@ const BuddiesPage = () => {
     const unsubscribeRequests = onSnapshot(
       incomingRequestsQuery,
       async (snapshot) => {
-        const requestsData = await Promise.all(
-          snapshot.docs.map(async (docSnap) => {
-            const requestData = docSnap.data();
-            const userDocRef = doc(db, "users", requestData.fromUserId);
-            const userDoc = await safeGetDoc(userDocRef);
-            return userDoc?.exists()
-              ? {
-                  ...requestData,
-                  uid: requestData.fromUserId,
-                  ...userDoc.data(),
-                  id: docSnap.id,
-                }
-              : null;
-          })
-        );
-        setFriendRequests(requestsData.filter(Boolean));
+        const requestsData = (
+          await Promise.all(
+            snapshot.docs.map(async (docSnap) => {
+              const requestData = docSnap.data();
+              const profile = await getCachedUser(requestData.fromUserId);
+              return profile
+                ? {
+                    ...requestData,
+                    uid: requestData.fromUserId,
+                    ...profile,
+                    id: docSnap.id,
+                  }
+                : null;
+            })
+          )
+        ).filter(Boolean);
+        setFriendRequests(requestsData);
+        if (requestsCacheKey) setMemoryCached(requestsCacheKey, requestsData, CACHE_TTL.firestore);
         updateCombinedLoading("requests", false);
       },
       (error) => {
@@ -257,6 +271,7 @@ const BuddiesPage = () => {
           sentMap[docSnap.data().toUserId] = true;
         });
         setSentRequests(sentMap);
+        if (sentCacheKey) setMemoryCached(sentCacheKey, sentMap, CACHE_TTL.firestore);
       } catch (error) {
         console.error("Error fetching outgoing requests:", error);
       } finally {
@@ -268,9 +283,8 @@ const BuddiesPage = () => {
       unsubscribeFriends();
       unsubscribeRequests();
     };
-  }, [userId, authLoading]);
+  }, [userId, friendsCacheKey, requestsCacheKey, sentCacheKey]);
 
-  // User Search (Keep client-side search logic as is)
   useEffect(() => {
     const searchUsers = async () => {
       const trimmedQuery = searchQuery.trim();
@@ -280,13 +294,8 @@ const BuddiesPage = () => {
       }
       if (!userId) return;
       const lowerCaseQuery = trimmedQuery.toLowerCase();
-      const usersQuery = query(collection(db, "users"), limit(100));
       try {
-        const usersSnapshot = await safeGetDocs(usersQuery);
-        const allFetchedUsers = (usersSnapshot?.docs || []).map((docSnap) => ({
-          uid: docSnap.id,
-          ...docSnap.data(),
-        }));
+        const allFetchedUsers = await getCachedUsersDirectory();
         const filteredResults = allFetchedUsers.filter((user) => {
           const isCurrentUser = user.uid === userId;
           const usernameString = user.username || "";
@@ -308,12 +317,12 @@ const BuddiesPage = () => {
     };
     const timerId = setTimeout(searchUsers, 300);
     return () => clearTimeout(timerId);
-  }, [searchQuery, userId, db]); // Added db dependency
+  }, [searchQuery, userId]);
 
-  // Interaction Handlers (Keep logic as is)
   const setLoadingState = (targetUserId, isLoading) => {
     setInteractionLoading((prev) => ({ ...prev, [targetUserId]: isLoading }));
   };
+
   const handleSendFriendRequest = async (toUserId) => {
     if (!userId || !toUserId) return;
     setLoadingState(toUserId, true);
@@ -326,14 +335,16 @@ const BuddiesPage = () => {
         createdAt: new Date(),
       });
       setSentRequests((prev) => ({ ...prev, [toUserId]: true }));
-      toast.success("Friend request sent!"); // Added toast
+      toast.success("Friend request sent!");
+      invalidateBuddiesCache(userId);
     } catch (error) {
       console.error("Error sending friend request:", error);
-      toast.error("Failed to send request."); // Use toast
+      toast.error("Failed to send request.");
     } finally {
       setLoadingState(toUserId, false);
     }
   };
+
   const handleCancelFriendRequest = async (toUserId) => {
     if (!userId || !toUserId) return;
     setLoadingState(toUserId, true);
@@ -345,7 +356,8 @@ const BuddiesPage = () => {
         delete updated[toUserId];
         return updated;
       });
-      toast.success("Request cancelled."); // Added toast
+      toast.success("Request cancelled.");
+      invalidateBuddiesCache(userId);
     } catch (error) {
       console.error("Error cancelling friend request:", error);
       toast.error("Failed to cancel request."); // Use toast
@@ -373,7 +385,8 @@ const BuddiesPage = () => {
         { friends: arrayUnion(userId) },
         { merge: true }
       );
-      toast.success("Friend request accepted!"); // Added toast
+      toast.success("Friend request accepted!");
+      invalidateBuddiesCache(userId);
     } catch (error) {
       console.error("Error accepting friend request:", error);
       toast.error("Failed to accept request."); // Use toast
@@ -389,7 +402,8 @@ const BuddiesPage = () => {
       await updateDoc(doc(db, "friendRequests", requestId), {
         status: "rejected",
       });
-      toast.info("Friend request rejected."); // Added toast
+      toast.info("Friend request rejected.");
+      invalidateBuddiesCache(userId);
     } catch (error) {
       console.error("Error rejecting friend request:", error);
       toast.error("Failed to reject request."); // Use toast
@@ -415,7 +429,8 @@ const BuddiesPage = () => {
       });
       const friendFriendsRef = doc(db, "friends", friendId);
       await updateDoc(friendFriendsRef, { friends: arrayRemove(userId) });
-      toast.info("Friend removed."); // Added toast
+      toast.info("Friend removed.");
+      invalidateBuddiesCache(userId);
     } catch (error) {
       console.error("Error unfriending user:", error);
       toast.error("Failed to unfriend user."); // Use toast
@@ -424,10 +439,8 @@ const BuddiesPage = () => {
     }
   };
 
-  // --- Render Logic ---
   const renderTabContent = () => {
-    // Use Themed Loader
-    if (authLoading || loading) {
+    if (loading) {
       return <SkeletonList count={5} seed="buddies-tab" />;
     }
 
@@ -546,13 +559,12 @@ const BuddiesPage = () => {
   };
 
   return (
-    // Themed background and text
     <div className="min-h-screen bg-primary text-textprimary font-poppins">
-      <toaster
+      <SeoHead title="Buddies" description="Connect with friends on Bombe." canonicalPath="/buddies" noindex />
+      <Toaster
         position="bottom-center"
         toastOptions={{ className: "bg-secondary text-textprimary" }}
       />
-      <NavBar />
       {/* Adjusted padding and max-width */}
       <main className="pt-20 pb-12 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
         {/* Themed heading */}

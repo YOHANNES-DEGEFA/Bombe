@@ -1,39 +1,31 @@
-// pages/favorites.js
-import React, { useEffect, useState, useMemo } from "react";
-import NavBar from "../../components/NavBar"; // Adjust path
-import Footer from "../../components/Footer"; // Adjust path
-import { db } from "../../firebase";
+import React, { useState, useMemo } from "react";
 import { useAuth } from "../../hooks/useAuth";
-import { doc } from "firebase/firestore";
-import { safeGetDoc } from "../../lib/firestore";
-import MovieCard from "../../components/MinimalCard"; // Adjust path
+import { useCachedFirestoreDoc } from "../../hooks/useCachedFirestoreDoc";
+import MovieCard from "../../components/MinimalCard";
 import { SkeletonCardGridPage } from "../../components/skeleton";
 import { useRouter } from "next/router";
-// Removed unused Framer Motion and Chevron icons for this version
 import Link from 'next/link';
 import { FaFilm, FaTv } from "react-icons/fa";
 import toast, { Toaster } from 'react-hot-toast';
-import Head from 'next/head';
-const IMAGE_BASE_URL_W500 = "https://image.tmdb.org/t/p/w500";
+import { SeoHead } from "../../components/SeoHead";
 
-// Custom hook (keep as is)
-const useFavorites = (userId) => { const [favorites, setFavorites] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(null); useEffect(() => { const fetchFavorites = async () => { setLoading(true); setError(null); const defaultFavs = { movies: [], episodes: [], shows: [] }; if (!userId) { setFavorites(defaultFavs); setLoading(false); return; }; try { const favoritesRef = doc(db, "favorites", userId); const favoritesDoc = await safeGetDoc(favoritesRef); if (favoritesDoc?.exists()) { const data = favoritesDoc.data(); setFavorites({ movies: data.movies || [], episodes: data.episodes || [], shows: data.shows || [] }); } else { setFavorites(defaultFavs); } } catch (err) { console.error("Error fetching favorites:", err); setError(err.message); setFavorites(defaultFavs); } finally { setLoading(false); } }; fetchFavorites(); }, [userId]); const memoizedFavorites = React.useMemo(() => favorites, [favorites]); return { favorites: memoizedFavorites, loading, error }; };
+const DEFAULT_FAVORITES = { movies: [], episodes: [], shows: [] };
 
-// Main FavoritesPage component
 const FavoritesPage = () => {
-  const { user: currentUser, loading: authLoading, userId } = useAuth();
-  const { favorites, loading: dataLoading, error } = useFavorites(userId);
-  const loading = authLoading || dataLoading;
+  const { user: currentUser, userId } = useAuth();
+  const { data: favoritesData, loading: dataLoading, error } = useCachedFirestoreDoc("favorites", userId, DEFAULT_FAVORITES);
+  const favorites = useMemo(() => favoritesData ?? DEFAULT_FAVORITES, [favoritesData]);
+  const loading = dataLoading;
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('movies');
 
-  const handleMovieCardClick = (movie) => { router.push(`/watch?movie_id=${movie.id}`); };
+  const handleMovieCardClick = (movie) => { router.push(`/movie/${movie.id}`); };
 
   // --- Navigation Handler for Episode Cards ---
   const handleEpisodeCardClick = (episode) => {
       // Ensure necessary data exists before navigating
       if(episode?.tvShowId && typeof episode?.seasonNumber === 'number' && typeof episode?.episodeNumber === 'number') {
-            router.push(`/watchTv?tv_id=${episode.tvShowId}`);
+            router.push(`/watchTv/${episode.tvShowId}/${episode.seasonNumber}/${episode.episodeNumber}`);
       } else {
           console.warn("Missing data to navigate to episode:", episode);
           toast.error("Could not navigate to episode - data missing.");
@@ -42,24 +34,23 @@ const FavoritesPage = () => {
 
   // --- Render Loading / Error / No User --- (Keep as is)
   if (loading) { return <SkeletonCardGridPage titleWidth={36} withTabs tabCount={2} />; }
-  if (error) { return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"><h2 className="text-2xl text-red-500 mb-4">Error Loading Favorites</h2><p className="text-textsecondary mb-6">{error}</p></div> <Footer /> </div> ); }
-  if (!currentUser) { return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"><h2 className="text-2xl text-accent mb-4">Log In Required</h2><p className="text-textsecondary mb-6">Please log in to view your favorites.</p><button onClick={() => router.push('/')} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors">Log In</button></div> <Footer /> </div> ); }
+  if (error) { return ( <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]"> <div className="text-center"><h2 className="text-2xl text-red-500 mb-4">Error Loading Favorites</h2><p className="text-textsecondary mb-6">{error}</p></div> </div> ); }
+  if (!currentUser) { return ( <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]"> <div className="text-center"><h2 className="text-2xl text-accent mb-4">Log In Required</h2><p className="text-textsecondary mb-6">Please log in to view your favorites.</p><button onClick={() => router.push('/')} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors">Log In</button></div> </div> ); }
 
   const favoriteMovies = favorites?.movies || [];
   const favoriteEpisodes = favorites?.episodes || [];
 
   // --- Main Render ---
   return (
-    <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col font-poppins">
-        <Head>
-            <title>My Favorites | Bombe</title>
-            <meta name="description" content="View your collection of favorite movies and TV show episodes. Your curated list of top picks on Bombe." />
-            <meta name="keywords" content="favorites, favorite movies, favorite tv shows, liked, Bombe" />
-        </Head>
+    <>
+        <SeoHead
+            title="My Favorites"
+            description="View your collection of favorite movies and TV show episodes."
+            canonicalPath="/favorites"
+            noindex
+        />
             <Toaster position="bottom-center" toastOptions={{ className: 'bg-secondary text-textprimary',}} />
-      <NavBar />
-      <div className="flex-grow">
-         <main className="p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
+      <main className="p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
            <h1 className="text-3xl md:text-4xl font-bold mb-6 text-textprimary">Favorites</h1>
 
            {/* Tab Navigation */}
@@ -80,7 +71,7 @@ const FavoritesPage = () => {
                       {favoriteMovies.length > 0 ? (
                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                            {favoriteMovies.map((movie) => (
-                             <MovieCard key={movie.id} movie={movie} onClick={() => handleMovieCardClick(movie)} />
+                             <MovieCard key={movie.id} movie={movie} onClick={() => handleMovieCardClick(movie)} skipDetailFetch />
                            ))}
                          </div>
                        ) : ( <p className="text-textsecondary text-center py-10 italic">You haven't added any favorite movies yet.</p> )}
@@ -113,7 +104,7 @@ const FavoritesPage = () => {
                                 <div key={episodeKey}>
                                      <MovieCard
                                         movie={cardData}
-                                        // onClick={() => handleEpisodeCardClick(episode)} // Navigate to specific episode watch page
+                                        skipDetailFetch
                                      />
                                      {/* Display S/E number below the card */}
                                      {/*<p className="text-xs mt-1.5 text-textsecondary text-center font-medium" title={`${cardData.title} - S${cardData.seasonNumber} E${cardData.episodeNumber}`}>*/}
@@ -130,9 +121,7 @@ const FavoritesPage = () => {
 
            </div>
          </main>
-       </div>
-      <Footer />
-    </div>
+    </>
   );
 };
 

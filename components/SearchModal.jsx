@@ -1,13 +1,11 @@
 // components/SearchModal.js
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import axios from "axios";
-import MovieCard from "./MinimalCard"; // Make sure this path is correct
 import { useRouter } from "next/router";
+import MovieCard from "./MinimalCard";
 import { SkeletonGrid } from "./skeleton";
 import { IoClose } from "react-icons/io5";
-
-const BASE_URL = "https://api.themoviedb.org/3";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
+import { getCachedGenres } from "../lib/tmdbGenres";
+import { tmdbGet } from "../lib/tmdb";
 
 // --- Debounce Utility ---
 function debounce(func, wait) {
@@ -44,44 +42,27 @@ const SearchModal = ({ isOpen, onClose }) => {
 
   // Fetch Genres (keep as is)
   useEffect(() => {
+    if (!isOpen) return;
     const fetchGenres = async () => {
-      if (!API_KEY) return; // Don't fetch if no API key
       try {
-        const [movieGenresRes, tvGenresRes] = await Promise.all([
-          axios.get(`${BASE_URL}/genre/movie/list`, {
-            params: { api_key: API_KEY },
-          }),
-          axios.get(`${BASE_URL}/genre/tv/list`, {
-            params: { api_key: API_KEY },
-          }),
-        ]);
-        const combinedGenres = [
-          ...movieGenresRes.data.genres,
-          ...tvGenresRes.data.genres,
-        ];
-        const uniqueGenres = Array.from(
-          new Map(combinedGenres.map((item) => [item.id, item])).values()
-        );
-        setGenres(uniqueGenres.sort((a, b) => a.name.localeCompare(b.name)));
+        const uniqueGenres = await getCachedGenres();
+        setGenres(uniqueGenres);
       } catch (error) {
         console.error("Error fetching genres:", error);
       }
     };
     fetchGenres();
-  }, [API_KEY]);
+  }, [isOpen]);
 
   // Fetch Trending (keep as is)
   useEffect(() => {
     if (isOpen && !query && trending.length === 0) {
       const fetchTrending = async () => {
-        if (!API_KEY) return;
         setLoading(true);
         setShowTrending(true);
         try {
-          const response = await axios.get(`${BASE_URL}/trending/all/week`, {
-            params: { api_key: API_KEY },
-          });
-          const filtered = response.data.results
+          const response = await tmdbGet("trending/all/week");
+          const filtered = (response.data?.results || [])
             .filter(
               (item) =>
                 item.poster_path &&
@@ -104,12 +85,12 @@ const SearchModal = ({ isOpen, onClose }) => {
     } else {
       setShowTrending(false);
     }
-  }, [isOpen, query, API_KEY, trending.length]);
+  }, [isOpen, query, trending.length]);
 
   // --- Fetch Search Results - Reverted Strategy ---
   const fetchSearchResults = useCallback(
     async (currentQuery, currentIsMovie, currentYear, currentGenre) => {
-      if (!currentQuery || !API_KEY) {
+      if (!currentQuery) {
         setResults([]);
         setLoading(false);
         setShowTrending(true);
@@ -117,24 +98,16 @@ const SearchModal = ({ isOpen, onClose }) => {
       }
       setLoading(true);
       setShowTrending(false);
-      // console.log(`[Search Fetch] Starting for: query="${currentQuery}", isMovie=${currentIsMovie}, year="${currentYear}", genre="${currentGenre}"`);
 
       try {
-        // ALWAYS use search/multi endpoint
-        const searchPath = "search/multi";
-        let params = {
-          api_key: API_KEY,
-          query: currentQuery,
-          include_adult: false,
-          page: 1,
-        };
-        // Do NOT add year or genre params here, /search/multi doesn't use them with query
-
-        // console.log(`[Search Fetch] Calling API: ${searchPath} with params:`, params);
-        const response = await axios.get(`${BASE_URL}/${searchPath}`, {
-          params,
+        const response = await tmdbGet("search/multi", {
+          params: {
+            query: currentQuery,
+            include_adult: false,
+            page: 1,
+          },
         });
-        let rawResults = response.data.results || [];
+        let rawResults = response.data?.results || [];
         // console.log(`[Search Fetch] Received ${rawResults.length} raw results.`);
 
         const yearInt =
@@ -208,8 +181,8 @@ const SearchModal = ({ isOpen, onClose }) => {
         setLoading(false);
       }
     },
-    [API_KEY]
-  ); // Only depends on API Key
+    []
+  );
 
   // Debounced Search Trigger (keep as is)
   const debouncedFetch = useCallback(debounce(fetchSearchResults, 400), [

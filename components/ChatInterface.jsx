@@ -1,18 +1,21 @@
 // components/ChatInterface.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { rtdb, auth, db } from '../firebase';
+import { rtdb, db } from '../firebase';
 import { ref, push, serverTimestamp, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 import { doc, getDoc } from 'firebase/firestore';
 import { FaPaperPlane } from 'react-icons/fa';
 import TimeAgo from 'react-timeago';
+import { useAuth } from '../hooks/useAuth';
+import toast from 'react-hot-toast';
 
 const ChatInterface = ({ roomId }) => {
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [sending, setSending] = useState(false);
-    const [usernameMap, setUsernameMap] = useState({}); // Stores uid -> username mappings
-    const currentUser = auth.currentUser;
+    const [usernameMap, setUsernameMap] = useState({});
+    const { user: currentUser } = useAuth();
     const messagesEndRef = useRef(null);
+    const chatUnavailable = !rtdb;
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -41,7 +44,7 @@ const ChatInterface = ({ roomId }) => {
 
     // Fetch messages from RTDB
     useEffect(() => {
-        if (!roomId) return;
+        if (!roomId || !rtdb) return;
 
         const messagesRef = ref(rtdb, `roomChats/${roomId}/messages`);
         const messagesQuery = query(messagesRef, orderByChild('timestamp'), limitToLast(100));
@@ -77,7 +80,7 @@ const ChatInterface = ({ roomId }) => {
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
-        if (!newMessage.trim() || !currentUser || !roomId) return;
+        if (!newMessage.trim() || !currentUser || !roomId || !rtdb) return;
         setSending(true);
 
         // First get the current user's username from Firestore
@@ -104,7 +107,7 @@ const ChatInterface = ({ roomId }) => {
             setNewMessage('');
         } catch (error) {
             console.error("Error sending message:", error);
-            alert("Failed to send message.");
+            toast.error("Failed to send message.");
         } finally {
             setSending(false);
         }
@@ -115,6 +118,11 @@ const ChatInterface = ({ roomId }) => {
             <h3 className="text-lg font-semibold text-textprimary p-3 border-b border-secondary-light">
                 Room Chat
             </h3>
+            {chatUnavailable && (
+                <p className="text-sm text-textsecondary text-center py-4 px-3">
+                    Chat is temporarily unavailable. Please try again later.
+                </p>
+            )}
             <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-secondary-light scrollbar-track-secondary">
                 {messages.length === 0 && (
                     <p className="text-sm text-textsecondary text-center py-4">No messages yet. Start chatting!</p>
@@ -147,12 +155,12 @@ const ChatInterface = ({ roomId }) => {
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder={currentUser ? "Type your message..." : "Please log in to chat"}
                     className="flex-1 bg-primary border border-secondary-light rounded-md p-2 text-textprimary focus:ring-accent focus:border-accent placeholder-textsecondary/50 disabled:opacity-50"
-                    disabled={!currentUser || sending}
+                    disabled={!currentUser || sending || chatUnavailable}
                     maxLength={250}
                 />
                 <button
                     type="submit"
-                    disabled={!currentUser || sending || !newMessage.trim()}
+                    disabled={!currentUser || sending || !newMessage.trim() || chatUnavailable}
                     className="bg-accent hover:bg-accent-hover text-on-accent p-2 w-10 h-10 flex items-center justify-center rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Send message"
                 >

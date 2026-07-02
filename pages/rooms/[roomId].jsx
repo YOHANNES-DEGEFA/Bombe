@@ -24,10 +24,18 @@ import {
   remove,
   get
 } from "firebase/database";
-import { onAuthStateChanged } from "firebase/auth";
-import NavBar from "../../components/NavBar"; // Adjust path
-import Footer from "../../components/Footer"; // Adjust path
-import ChatInterface from "../../components/ChatInterface"; // Adjust path
+import { fetchTmdbEndpoint } from "../../lib/tmdbEndpoint";
+import { useAuth } from "../../hooks/useAuth";
+import {
+  getApiErrorMessage,
+  getFirestoreErrorMessage,
+  logAppError,
+} from "../../lib/userFacingError";
+import dynamic from "next/dynamic";
+
+const ChatInterface = dynamic(() => import("../../components/ChatInterface"), {
+  ssr: false,
+});
 import EpisodeCard from "../../components/RoomEpisodeCard"; // *** Ensure this path is correct ***
 import { Skeleton, SkeletonPage, SkeletonEpisodeStrip } from "../../components/skeleton";
 import toast, { Toaster } from "react-hot-toast";
@@ -49,35 +57,15 @@ const IMAGE_BASE_URL_ORIGINAL = "https://image.tmdb.org/t/p/original";
 const TMDB_API_KEY = process.env.NEXT_PUBLIC_API_KEY; // Corrected: Use NEXT_PUBLIC_API_KEY consistently
 const DEBOUNCE_DELAY = 400; // milliseconds for search debounce
 
-const fetchTMDB = async (endpoint) => {
-  // **FIXED: Use TMDB_API_KEY constant**
-  const url = `https://api.themoviedb.org/3/${endpoint}${
-    endpoint.includes("?") ? "&" : "?"
-  }api_key=${TMDB_API_KEY}&language=en-US`;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error("TMDB API Error:", response.status, await response.text());
-      // Return a specific error object or rethrow for better handling
-      throw new Error(`TMDB Error: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching TMDB data:", error);
-    // Re-throw the error so calling functions can catch it
-    throw error;
-  }
-};
+const fetchTMDB = fetchTmdbEndpoint;
 // --- End Constants and Helpers ---
 
 const RoomPage = () => {
   const router = useRouter();
   const { roomId } = router.query;
 
-  // Auth State
-  const [currentUser, setCurrentUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [currentUserFriends, setCurrentUserFriends] = useState([]); // State for friend UIDs
+  const { user: currentUser, loading: authLoading } = useAuth();
+  const [currentUserFriends, setCurrentUserFriends] = useState([]);
 
   // Room State
   const [roomData, setRoomData] = useState(null);
@@ -106,16 +94,6 @@ const RoomPage = () => {
   const [episodes, setEpisodes] = useState([]);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   const seasonSectionRef = useRef(null);
-
-  // --- Auth Listener ---
-  useEffect(() => {
-    setAuthLoading(true);
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
 
   // --- Fetch Current User's Friends List UIDs (Real-time) ---
   useEffect(() => {
@@ -146,7 +124,7 @@ const RoomPage = () => {
   // --- Fetch Room Data (Firestore) & Manage Membership ---
   useEffect(() => {
     if (authLoading || !roomId) {
-      setLoadingRoom(authLoading);
+      setLoadingRoom(true);
       return;
     }
     if (!currentUser) {
@@ -177,13 +155,12 @@ const RoomPage = () => {
           // Set room data and membership status
           setRoomData({ id: docSnap.id, ...data });
           setError(null);
-          setIsMember(true); // User is either creator or member at this point
+          setIsMember(true);
 
-          // Update local state based on Firestore (season/episode)
           setSelectedSeason(data.currentSeason || null);
           setSelectedEpisode(data.currentEpisode || null);
+          setLoadingRoom(false);
 
-          // Fetch member details (optimize if needed for large rooms)
           if (data.members && Array.isArray(data.members)) {
             try {
               // Optimization: Only refetch if member list actually changed
@@ -216,7 +193,7 @@ const RoomPage = () => {
             setMembersList([]);
           }
         } else {
-          setError(`Room with ID ${roomId} not found.`);
+          setError("This room doesn't exist or may have been deleted.");
           setRoomData(null);
           setIsMember(false);
           setMembersList([]);
@@ -224,8 +201,10 @@ const RoomPage = () => {
         setLoadingRoom(false);
       },
       (err) => {
-        console.error("Error fetching room data:", err);
-        setError("Failed to load room data. Check console for details.");
+        logAppError("room data", err);
+        setError(
+          getFirestoreErrorMessage(err, "We couldn't load this room. Please try again.")
+        );
         setLoadingRoom(false);
       }
     );
@@ -253,16 +232,17 @@ const RoomPage = () => {
               setSelectedSeason(seasonToLoad); // This will trigger the episode fetch effect
             } else {
               // Handle API error or no details found
-              toast.error(
-                `Could not load details for TV show ID: ${roomData.currentMediaId}`
-              );
+              toast.error("Couldn't load show details.");
               setTvShowDetails(null);
               setSelectedSeason(null);
               setEpisodes([]);
             }
           })
           .catch((err) => {
-            toast.error(`Error loading TV show details: ${err.message}`);
+            logAppError("room TV show details", err);
+            toast.error(
+              getApiErrorMessage(err, "Couldn't load show details.")
+            );
             setTvShowDetails(null);
             setSelectedSeason(null);
             setEpisodes([]);
@@ -324,13 +304,12 @@ const RoomPage = () => {
           }
         })
         .catch((err) => {
-          console.error(
-            `Error fetching episodes for season ${selectedSeason}:`,
-            err
-          );
-          // *** ADDED TOAST ERROR ***
+          logAppError(`room episodes S${selectedSeason}`, err);
           toast.error(
-            `Failed to load episodes for Season ${selectedSeason}: ${err.message}`
+            getApiErrorMessage(
+              err,
+              `Couldn't load episodes for Season ${selectedSeason}.`
+            )
           );
           setEpisodes([]);
           setSelectedEpisode(null); // Reset episode if fetch fails
@@ -352,7 +331,7 @@ const RoomPage = () => {
 
   // --- Presence System (RTDB) ---
   useEffect(() => {
-    if (!roomId || !currentUser || !isMember || !roomData) return; // Ensure roomData is loaded too
+    if (!roomId || !currentUser || !isMember || !roomData || !rtdb) return;
     const userStatusRef = ref(
       rtdb,
       `/roomPresence/${roomId}/${currentUser.uid}`
@@ -414,9 +393,8 @@ const RoomPage = () => {
           setSearchResults([]); // Clear results if API returns unexpected format
         }
       } catch (error) {
-        console.error("Media Search error:", error);
-        // **FIX: Add user feedback**
-        toast.error(`Media search failed: ${error.message}`);
+        logAppError("room media search", error);
+        toast.error(getApiErrorMessage(error, "Search failed. Please try again."));
         setSearchResults([]); // Clear results on error
       } finally {
         // Stop loading spinner regardless of success/fail
@@ -491,8 +469,10 @@ const RoomPage = () => {
       setSelectedEpisode(null);
       setEpisodes([]);
     } catch (error) {
-      console.error("Error updating media:", error);
-      toast.error(`Failed to update room media: ${error.message}`, {
+      logAppError("room media update", error);
+      toast.error(
+        getFirestoreErrorMessage(error, "Couldn't update room media. Please try again."),
+        {
         id: selectToastId,
       });
       setIsSearchingMedia(false); // Ensure loading stops on error
@@ -537,8 +517,10 @@ const RoomPage = () => {
         block: "nearest",
       });
     } catch (error) {
-      console.error("Error updating season:", error);
-      toast.error(`Failed to update season: ${error.message}`);
+      logAppError("room season update", error);
+      toast.error(
+        getFirestoreErrorMessage(error, "Couldn't update season. Please try again.")
+      );
       // Optionally revert local state if Firestore update fails
       // setSelectedSeason(roomData.currentSeason); // Revert to Firestore value
       // setSelectedEpisode(roomData.currentEpisode);
@@ -575,8 +557,10 @@ const RoomPage = () => {
       toast.success(`Selected S${selectedSeason} E${episodeNumber}`);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
-      console.error("Error updating episode:", error);
-      toast.error(`Failed to update episode: ${error.message}`);
+      logAppError("room episode update", error);
+      toast.error(
+        getFirestoreErrorMessage(error, "Couldn't update episode. Please try again.")
+      );
       // Optionally revert local state
       // setSelectedEpisode(roomData.currentEpisode);
     }
@@ -638,7 +622,7 @@ const RoomPage = () => {
         });
 
         // Client-side filtering (case-insensitive startsWith) AND exclude existing members
-        const currentMemberIds = roomData?.memberIds || [];
+        const currentMemberIds = roomData?.members || [];
         const filteredUsers = friendsData.filter(
           (user) =>
             user.username?.toLowerCase().startsWith(lowerCaseQuery) &&
@@ -653,7 +637,7 @@ const RoomPage = () => {
         setIsSearchingUsers(false);
       }
     },
-    [currentUser, roomData?.createdBy, roomData?.memberIds, currentUserFriends]
+    [currentUser, roomData?.createdBy, roomData?.members, currentUserFriends]
   ); // Dependencies
 
   const handleUserSearchInputChange = (e) => {
@@ -681,17 +665,17 @@ const RoomPage = () => {
     const roomDocRef = doc(db, "rooms", roomId);
     try {
         // --- CORRECTED FIELD NAME ---
-        await updateDoc(roomDocRef, { members: arrayUnion(userToAdd.uid) }); // Changed memberIds to members
-        // --- END CORRECTION ---
+        await updateDoc(roomDocRef, { members: arrayUnion(userToAdd.uid) });
 
-        // Update RTDB (this part looks correct)
-        const userMemberRefRTDB = ref(
-            rtdb,
-            `/watchRooms/${roomId}/members/${userToAdd.uid}`
-        );
-        await set(userMemberRefRTDB, {
-            username: userToAdd.username || "Anonymous",
-        });
+        if (rtdb) {
+            const userMemberRefRTDB = ref(
+                rtdb,
+                `/watchRooms/${roomId}/members/${userToAdd.uid}`
+            );
+            await set(userMemberRefRTDB, {
+                username: userToAdd.username || "Anonymous",
+            });
+        }
 
         toast.success(`${userToAdd.username || "User"} added.`);
 
@@ -708,7 +692,7 @@ const RoomPage = () => {
          }
     } catch (addError) {
         console.error("Error adding member:", addError);
-        toast.success(`${userToAdd.username || "User"} added.`);
+        toast.error(`Failed to add ${userToAdd.username || "user"}.`);
     }
 };
 const handleRemoveMember = async (memberUidToRemove) => {
@@ -738,12 +722,12 @@ const handleRemoveMember = async (memberUidToRemove) => {
         // --- CORRECTED FIELD NAME ---
         // Update the 'members' array field in Firestore
         await updateDoc(roomDocRef, {
-            members: arrayRemove(memberUidToRemove), // Use 'members' instead of 'memberIds'
+            members: arrayRemove(memberUidToRemove),
         });
-        // --- END CORRECTION ---
 
-        // Remove RTDB presence node (This part was correct)
-        await remove(userStatusRef); // Use RTDB 'remove'
+        if (rtdb) {
+            await remove(userStatusRef);
+        }
 
         toast.success(`${memberUsername} removed.`, { id: removingToast });
         // No need to manually update membersList state here,
@@ -751,7 +735,7 @@ const handleRemoveMember = async (memberUidToRemove) => {
 
     } catch (err) {
         console.error("Error removing member:", err);
-        toast.success(`${memberUsername} removed.`, { id: removingToast }); // Show error message
+        toast.error(`Failed to remove ${memberUsername}.`, { id: removingToast });
     }
 };
   const handleLeaveRoom = async () => {
@@ -770,14 +754,16 @@ const handleRemoveMember = async (memberUidToRemove) => {
     try {
       if (!isCreator) {
         await updateDoc(roomDocRef, {
-          memberIds: arrayRemove(currentUser.uid),
+          members: arrayRemove(currentUser.uid),
         });
       } else {
         toast.error("Creators cannot leave. Delete room instead.");
         toast.dismiss(leavingToast);
         return;
       }
-      await remove(userStatusRef);
+      if (rtdb) {
+        await remove(userStatusRef);
+      }
       toast.success("Left the room.", { id: leavingToast });
       router.push("/rooms");
     } catch (err) {
@@ -836,21 +822,16 @@ const handleRemoveMember = async (memberUidToRemove) => {
     // Handles "not member" or "not found" errors set earlier
     return (
       <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4">
-        {" "}
-        <NavBar />{" "}
-        <div className="text-center mt-20">
-          {" "}
-          <h2 className="text-2xl text-red-500 mb-4">Error</h2>{" "}
-          <p className="text-textsecondary mb-6">{error}</p>{" "}
+        <div className="text-center">
+          <h2 className="text-2xl text-red-500 mb-4">Error</h2>
+          <p className="text-textsecondary mb-6">{error}</p>
           <button
             onClick={() => router.push("/rooms")}
             className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"
           >
-            {" "}
-            Back to Rooms{" "}
-          </button>{" "}
-        </div>{" "}
-        <Footer />{" "}
+            Back to Rooms
+          </button>
+        </div>
       </div>
     );
   }
@@ -858,23 +839,18 @@ const handleRemoveMember = async (memberUidToRemove) => {
   if (!currentUser || !roomData) {
     return (
       <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4">
-        {" "}
-        <NavBar />{" "}
-        <div className="text-center mt-20">
-          {" "}
-          <h2 className="text-2xl text-red-500 mb-4">Access Denied</h2>{" "}
+        <div className="text-center">
+          <h2 className="text-2xl text-red-500 mb-4">Access Denied</h2>
           <p className="text-textsecondary mb-6">
             Could not load room data or user information.
-          </p>{" "}
+          </p>
           <button
             onClick={() => router.push("/rooms")}
             className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"
           >
-            {" "}
-            Back to Rooms{" "}
-          </button>{" "}
-        </div>{" "}
-        <Footer />{" "}
+            Back to Rooms
+          </button>
+        </div>
       </div>
     );
   }
@@ -887,7 +863,6 @@ const handleRemoveMember = async (memberUidToRemove) => {
         position="bottom-center"
         toastOptions={{ className: "bg-secondary text-textprimary" }}
       />
-      <NavBar />
 
       {/* Background Image */}
       {roomData.currentMediaPoster && (
@@ -1323,7 +1298,6 @@ const handleRemoveMember = async (memberUidToRemove) => {
         </div>{" "}
         {/* End Main Content Flex */}
       </main>
-      <Footer />
     </div>
   );
 };

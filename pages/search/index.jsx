@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from "react";
-import NavBar from "../../components/NavBar";
-import Footer from "../../components/Footer";
-import axios from "axios";
 import MovieCard from "../../components/MinimalCard";
 import { useRouter } from "next/router";
 import { SkeletonSearchPage, SkeletonGrid } from "../../components/skeleton";
-const BASE_URL = "https://api.themoviedb.org/3";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
+import { SeoHead } from "../../components/SeoHead";
+import { truncateMeta } from "../../lib/seo";
+import { tmdbGet } from "../../lib/tmdb";
+import { getCachedGenres } from "../../lib/tmdbGenres";
 
 const SearchPage = () => {
   const router = useRouter();
@@ -20,12 +19,18 @@ const SearchPage = () => {
   const [mostSearched, setMostSearched] = useState([]);
   const [initialLoad, setInitialLoad] = useState(true);
   useEffect(() => {
+    if (!router.isReady) return;
+    const urlQuery = typeof router.query.q === "string" ? router.query.q : "";
+    if (urlQuery && urlQuery !== query) {
+      setQuery(urlQuery);
+    }
+  }, [router.isReady, router.query.q, query]);
+
+  useEffect(() => {
     const fetchGenres = async () => {
       try {
-        const response = await axios.get(`${BASE_URL}/genre/movie/list`, {
-          params: { api_key: API_KEY, language: "en-US" },
-        });
-        setGenres(response.data.genres);
+        const genreList = await getCachedGenres();
+        setGenres(genreList);
       } catch (error) {
         console.error("Error fetching genres:", error);
       } finally {
@@ -40,10 +45,8 @@ const SearchPage = () => {
     if (!query && !initialLoad) {
       const fetchMostSearched = async () => {
         try {
-          const response = await axios.get(`${BASE_URL}/trending/all/week`, {
-            params: { api_key: API_KEY },
-          });
-          const filteredResults = response.data.results.filter(
+          const response = await tmdbGet("trending/all/week");
+          const filteredResults = (response.data?.results || []).filter(
             (item) => item.poster_path
           );
           setMostSearched(filteredResults.slice(0, 10));
@@ -61,15 +64,14 @@ const SearchPage = () => {
       const fetchResults = async () => {
         setLoading(true);
         try {
-          const response = await axios.get(`${BASE_URL}/search/multi`, {
+          const response = await tmdbGet("search/multi", {
             params: {
-              api_key: API_KEY,
-              query: query,
-              year: year ? parseInt(year) : undefined,
+              query,
+              year: year ? parseInt(year, 10) : undefined,
               with_genres: genre || undefined,
             },
           });
-          let filteredResults = response.data.results;
+          let filteredResults = response.data?.results || [];
           if (query) {
             filteredResults = response.data.results.filter(
               (item) =>
@@ -104,9 +106,21 @@ const SearchPage = () => {
 
   return (
     <div className="min-h-screen bg-primary text-textprimary flex flex-col mt-20">
-      <NavBar />
+      <SeoHead
+        title={query ? `Search: ${query}` : "Search Movies & TV Shows"}
+        description={
+          query
+            ? truncateMeta(`Search results for "${query}" — find movies and TV shows on Bombe.`)
+            : "Search thousands of movies and TV shows. Filter by genre, year, and type to find what to watch next on Bombe."
+        }
+        canonicalPath={query ? `/search?q=${encodeURIComponent(query)}` : "/search"}
+        keywords="search movies, search tv shows, find films, what to watch"
+      />
       <main className="flex-1 p-6">
         <section className="max-w-4xl mx-auto">
+          <h1 className="text-2xl md:text-3xl font-bold mb-6">
+            {query ? `Results for "${query}"` : "Search Movies & TV Shows"}
+          </h1>
           <div className="flex flex-col space-y-4">
             <input
               type="text"
@@ -222,6 +236,7 @@ const SearchPage = () => {
                   <MovieCard
                     key={item.id}
                     movie={item}
+                    skipDetailFetch
                     onClick={() =>
                       router.push(`/${item.media_type}/${item.id}`)
                     }
@@ -239,6 +254,7 @@ const SearchPage = () => {
                   <MovieCard
                     key={item.id}
                     movie={item}
+                    skipDetailFetch
                     onClick={() =>
                       router.push(`/${item.media_type}/${item.id}`)
                     }
@@ -249,7 +265,6 @@ const SearchPage = () => {
           )}
         </section>
       </main>
-      <Footer />
     </div>
   );
 };

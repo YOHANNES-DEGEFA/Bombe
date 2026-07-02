@@ -1,12 +1,18 @@
 {
+  "id": "/",
   "name": "Bombe",
   "short_name": "Bombe",
-  "description": "Premium movie and TV streaming on Bombe",
+  "description": "Bombe — stream movies and TV shows online",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#141414",
   "theme_color": "#141414",
   "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
     {
       "src": "/favicon-16x16.png",
       "sizes": "16x16",
@@ -15,11 +21,6 @@
     {
       "src": "/favicon-32x32.png",
       "sizes": "32x32",
-      "type": "image/png"
-    },
-    {
-      "src": "/favicon-48x48.png",
-      "sizes": "48x48",
       "type": "image/png"
     },
     {

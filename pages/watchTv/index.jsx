@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
+import { getApiErrorMessage, logAppError } from "../../lib/userFacingError";
 import { motion, AnimatePresence } from "framer-motion";
-import NavBar from "../../components/NavBar"; // Adjust path if needed
-import Footer from "../../components/Footer"; // Adjust path if needed
 import EpisodeCard from "../../components/EpisodeCard"; // Adjust path if needed
 import SearchCard from "../../components/MinimalCard"; // Adjust path if needed (using this for recommendations)
 import {
@@ -62,7 +61,7 @@ const TVDetailsModal = ({ onClose, tvShow, cast, creator, trailerKey }) => {
     const [tvShow, setTVShow] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    useEffect(() => { const fetchTVShow = async () => { setLoading(true); setTVShow(null); setError(null); if (!id || !apiKey || id === "0") { setLoading(false); return; } try { const response = await axios.get(`${BASE_URL}/tv/${id}`, { params: { api_key: apiKey, language: "en-US" }, }); if (response.data) setTVShow(response.data); else throw new Error(`TV Show with ID ${id} not found.`); } catch (err) { console.error("Error in useTVShow:", err); setError(err.message || "Failed to fetch TV show data."); } finally { setLoading(false); } }; if (id && id !== "0") fetchTVShow(); else setLoading(false); }, [id, apiKey]);
+    useEffect(() => { const fetchTVShow = async () => { setLoading(true); setTVShow(null); setError(null); if (!id || !apiKey || id === "0") { setLoading(false); return; } try { const response = await axios.get(`${BASE_URL}/tv/${id}`, { params: { api_key: apiKey, language: "en-US" }, }); if (response.data) setTVShow(response.data); else throw new Error(`TV Show with ID ${id} not found.`); } catch (err) { logAppError("TV show details", err); setError(getApiErrorMessage(err, "We couldn't load this show. Please try again.")); } finally { setLoading(false); } }; if (id && id !== "0") fetchTVShow(); else setLoading(false); }, [id, apiKey]);
     return { tvShow, loading, error };
   };
   const useTVSeasonsEpisodes = (id, seasonNumber, apiKey) => {
@@ -297,7 +296,7 @@ const useTVShow = (id, apiKey) => {
   const [tvShow, setTVShow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  useEffect(() => { const fetchTVShow = async () => { setLoading(true); setTVShow(null); setError(null); if (!id || !apiKey || id === "0") { setLoading(false); return; } try { const response = await axios.get(`${BASE_URL}/tv/${id}`, { params: { api_key: apiKey, language: "en-US" }, }); if (response.data) setTVShow(response.data); else throw new Error(`TV Show with ID ${id} not found.`); } catch (err) { console.error("Error in useTVShow:", err); setError(err.message || "Failed to fetch TV show data."); } finally { setLoading(false); } }; if (id && id !== "0") fetchTVShow(); else setLoading(false); }, [id, apiKey]);
+  useEffect(() => { const fetchTVShow = async () => { setLoading(true); setTVShow(null); setError(null); if (!id || !apiKey || id === "0") { setLoading(false); return; } try { const response = await axios.get(`${BASE_URL}/tv/${id}`, { params: { api_key: apiKey, language: "en-US" }, }); if (response.data) setTVShow(response.data); else throw new Error(`TV Show with ID ${id} not found.`); } catch (err) { logAppError("TV show details", err); setError(getApiErrorMessage(err, "We couldn't load this show. Please try again.")); } finally { setLoading(false); } }; if (id && id !== "0") fetchTVShow(); else setLoading(false); }, [id, apiKey]);
   return { tvShow, loading, error };
 };
 const useTVSeasonsEpisodes = (id, seasonNumber, apiKey) => {
@@ -605,8 +604,8 @@ const TVShowPlayerPage = () => {
 
   // --- Render States (Themed) ---
   if (!isRouterReady || loadingShow) { return <SkeletonWatchTvPage />; }
-  if (error) { return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Show</h2> <p className="text-textsecondary mb-6">{error}</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
-  if (!tvShow) { return ( <div className="min-h-screen mt-16 bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <NavBar /> <div className="text-center"> <h2 className="text-2xl text-yellow-500 mb-4">TV Show Not Found</h2> <p className="text-textsecondary mb-6">The requested TV show could not be found.</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> <Footer /> </div> ); }
+  if (error) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Show</h2> <p className="text-textsecondary mb-6">{error}</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> </div> ); }
+  if (!tvShow) { return ( <div className="min-h-screen bg-primary text-textprimary flex flex-col items-center justify-center px-4"> <div className="text-center"> <h2 className="text-2xl text-yellow-500 mb-4">TV Show Not Found</h2> <p className="text-textsecondary mb-6">The requested TV show could not be found.</p> <button onClick={() => router.push("/home")} className="bg-accent hover:bg-accent-hover text-on-accent font-semibold py-2 px-6 rounded-lg transition-colors"> Go to Home </button> </div> </div> ); }
 
   // --- Main Render (UPDATED) ---
   return (
@@ -616,7 +615,6 @@ const TVShowPlayerPage = () => {
           <meta name="description" content={tvShow?.overview ? tvShow.overview.substring(0, 160) + '...' : 'Discover details about TV shows on Bombe.'} />
         </Head>
         <Toaster position="bottom-center" toastOptions={{ className: "bg-secondary/90 text-textprimary backdrop-blur-md border border-white/10" }} />
-        <NavBar />
 
         {/* Cinematic Backdrop */}
         {tvShow.backdrop_path && (
@@ -805,7 +803,6 @@ const TVShowPlayerPage = () => {
           </div>
         </main>
 
-        <Footer />
       </div>
   );
 };

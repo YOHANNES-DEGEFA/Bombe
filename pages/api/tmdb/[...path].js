@@ -32,8 +32,15 @@ export default async function handler(req, res) {
 
   const url = `https://api.themoviedb.org/3/${tmdbPath}?${params.toString()}`;
 
+  const isCacheable =
+    tmdbPath.startsWith("trending/") ||
+    tmdbPath.startsWith("discover/") ||
+    tmdbPath.startsWith("genre/") ||
+    tmdbPath.startsWith("movie/popular") ||
+    tmdbPath.startsWith("tv/popular");
+
   try {
-    const response = await fetch(url, { cache: "no-store" });
+    const response = await fetch(url, isCacheable ? { next: { revalidate: 3600 } } : { cache: "no-store" });
     const data = await response.json();
 
     if (!response.ok) {
@@ -41,7 +48,11 @@ export default async function handler(req, res) {
       return;
     }
 
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    if (isCacheable) {
+      res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=86400");
+    } else {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    }
     res.status(200).json(data);
   } catch {
     res.status(502).json({

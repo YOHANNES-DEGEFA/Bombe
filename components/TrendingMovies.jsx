@@ -10,18 +10,25 @@ import { SkeletonHero } from "./skeleton";
 
 const IMAGE_BASE_URL = TMDB_IMAGE_ORIGINAL;
 
-const TrendingMovies = () => {
-  const [trendingMovies, setTrendingMovies] = useState([]);
+const TrendingMovies = ({ items: itemsProp }) => {
+  const [trendingMovies, setTrendingMovies] = useState(itemsProp || []);
   const [currentMovieIndex, setCurrentMovieIndex] = useState(0);
   const [direction, setDirection] = useState(0);
   const router = useRouter();
-  const [loadingList, setLoadingList] = useState(true);
+  const [loadingList, setLoadingList] = useState(!itemsProp?.length);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [movieDetails, setMovieDetails] = useState(null);
   const intervalRef = useRef(null);
 
   // Fetch trending movies list (keep as is)
   useEffect(() => {
+    if (itemsProp?.length) {
+      setTrendingMovies(itemsProp);
+      setCurrentMovieIndex(0);
+      setLoadingList(false);
+      return;
+    }
+
     setLoadingList(true);
     const fetchTrending = async () => {
       try {
@@ -41,7 +48,7 @@ const TrendingMovies = () => {
       }
     };
     fetchTrending();
-  }, []);
+  }, [itemsProp]);
 
    // Fetch details for the current movie (keep as is)
    useEffect(() => {
@@ -100,7 +107,7 @@ const TrendingMovies = () => {
   const handlers = useSwipeable({ onSwipedLeft: () => paginate(1), onSwipedRight: () => paginate(-1), preventDefaultTouchmoveEvent: true, trackMouse: true, });
 
   // Routing (keep as is)
-  const handleWatch = (movieId) => { router.push(`/watch?movie_id=${movieId}`); };
+  const handleWatch = (movieId) => { router.push(`/movie/${movieId}`); };
 
   // Framer Motion Variants (keep as is)
   const variants = { enter: (direction) => ({ x: direction > 0 ? "100%" : "-100%", opacity: 0 }), center: { zIndex: 1, x: 0, opacity: 1 }, exit: (direction) => ({ zIndex: 0, x: direction < 0 ? "100%" : "-100%", opacity: 0 }), };
@@ -108,13 +115,12 @@ const TrendingMovies = () => {
 
   // --- Render ---
   if (loadingList) {
-    return <SkeletonHero seed="trending-movies-hero" />;
+    return <SkeletonHero seed="trending-movies-hero" withMarginTop={false} className="-mt-16" />;
   }
 
   if (trendingMovies.length === 0) {
     return (
-      // Use Theme Color, Add mt-16
-      <div className="h-[60vh] mt-16 flex items-center justify-center bg-primary text-textsecondary"> {/* Use text-textsecondary */}
+      <div className="h-[60vh] -mt-16 flex items-center justify-center bg-primary text-textsecondary">
         <p>No trending movies found.</p>
       </div>
     );
@@ -125,9 +131,7 @@ const TrendingMovies = () => {
   const showDetails = !loadingDetails && movieDetails && movieDetails.id === currentMovie.id;
 
   return (
-    // --- ADDED MARGIN TOP (mt-16), Themed Background ---
-    <div className="relative w-full h-[75vh] overflow-hidden font-poppins bg-primary mt-16" {...handlers}>
-    {/* --- END MARGIN TOP --- */}
+    <div className="relative w-full h-[75vh] overflow-hidden font-poppins bg-primary -mt-16" {...handlers}>
 
       {/* Background Image Slider */}
       <AnimatePresence initial={false} custom={direction} mode="sync">
@@ -167,9 +171,9 @@ const TrendingMovies = () => {
                 variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
                 className="max-w-lg md:max-w-xl"
                >
-                <motion.h1 variants={textVariants} custom={0} className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-3 drop-shadow-lg leading-tight text-textprimary"> {/* Themed text */}
+                <motion.h2 variants={textVariants} custom={0} className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-3 drop-shadow-lg leading-tight text-textprimary">
                   {movieDetails.title}
-                </motion.h1>
+                </motion.h2>
 
                  <motion.div variants={textVariants} custom={0.1} className="flex flex-wrap items-center gap-2 mb-3 md:mb-4">
                   {movieDetails.genres.slice(0, 3).map((genre) => (
