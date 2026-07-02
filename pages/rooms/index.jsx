@@ -223,8 +223,6 @@ const RoomsPage = () => {
       <CreateRoomModal
         isOpen={isModalOpen}
         onClose={closeModal}
-        currentUser={currentUser}
-        setError={setError}
       />
     </>
   );

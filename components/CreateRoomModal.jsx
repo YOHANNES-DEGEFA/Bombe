@@ -2,15 +2,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoClose } from 'react-icons/io5';
-import { db, auth } from '../firebase'; // Adjust path
+import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { useRouter } from 'next/router'; // To redirect after creation
+import { useRouter } from 'next/router';
+import { useAuth } from '../hooks/useAuth';
 
 const CreateRoomModal = ({ isOpen, onClose }) => {
     const [roomName, setRoomName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const currentUser = auth.currentUser;
+    const { user: currentUser } = useAuth();
     const router = useRouter();
 
     const handleCreateRoom = async (e) => {

@@ -325,7 +325,7 @@ const RoomPage = () => {
 
   // --- Presence System (RTDB) ---
   useEffect(() => {
-    if (!roomId || !currentUser || !isMember || !roomData) return; // Ensure roomData is loaded too
+    if (!roomId || !currentUser || !isMember || !roomData || !rtdb) return;
     const userStatusRef = ref(
       rtdb,
       `/roomPresence/${roomId}/${currentUser.uid}`
@@ -611,7 +611,7 @@ const RoomPage = () => {
         });
 
         // Client-side filtering (case-insensitive startsWith) AND exclude existing members
-        const currentMemberIds = roomData?.memberIds || [];
+        const currentMemberIds = roomData?.members || [];
         const filteredUsers = friendsData.filter(
           (user) =>
             user.username?.toLowerCase().startsWith(lowerCaseQuery) &&
@@ -626,7 +626,7 @@ const RoomPage = () => {
         setIsSearchingUsers(false);
       }
     },
-    [currentUser, roomData?.createdBy, roomData?.memberIds, currentUserFriends]
+    [currentUser, roomData?.createdBy, roomData?.members, currentUserFriends]
   ); // Dependencies
 
   const handleUserSearchInputChange = (e) => {
@@ -654,17 +654,17 @@ const RoomPage = () => {
     const roomDocRef = doc(db, "rooms", roomId);
     try {
         // --- CORRECTED FIELD NAME ---
-        await updateDoc(roomDocRef, { members: arrayUnion(userToAdd.uid) }); // Changed memberIds to members
-        // --- END CORRECTION ---
+        await updateDoc(roomDocRef, { members: arrayUnion(userToAdd.uid) });
 
-        // Update RTDB (this part looks correct)
-        const userMemberRefRTDB = ref(
-            rtdb,
-            `/watchRooms/${roomId}/members/${userToAdd.uid}`
-        );
-        await set(userMemberRefRTDB, {
-            username: userToAdd.username || "Anonymous",
-        });
+        if (rtdb) {
+            const userMemberRefRTDB = ref(
+                rtdb,
+                `/watchRooms/${roomId}/members/${userToAdd.uid}`
+            );
+            await set(userMemberRefRTDB, {
+                username: userToAdd.username || "Anonymous",
+            });
+        }
 
         toast.success(`${userToAdd.username || "User"} added.`);
 
@@ -681,7 +681,7 @@ const RoomPage = () => {
          }
     } catch (addError) {
         console.error("Error adding member:", addError);
-        toast.success(`${userToAdd.username || "User"} added.`);
+        toast.error(`Failed to add ${userToAdd.username || "user"}.`);
     }
 };
 const handleRemoveMember = async (memberUidToRemove) => {
@@ -711,12 +711,12 @@ const handleRemoveMember = async (memberUidToRemove) => {
         // --- CORRECTED FIELD NAME ---
         // Update the 'members' array field in Firestore
         await updateDoc(roomDocRef, {
-            members: arrayRemove(memberUidToRemove), // Use 'members' instead of 'memberIds'
+            members: arrayRemove(memberUidToRemove),
         });
-        // --- END CORRECTION ---
 
-        // Remove RTDB presence node (This part was correct)
-        await remove(userStatusRef); // Use RTDB 'remove'
+        if (rtdb) {
+            await remove(userStatusRef);
+        }
 
         toast.success(`${memberUsername} removed.`, { id: removingToast });
         // No need to manually update membersList state here,
@@ -724,7 +724,7 @@ const handleRemoveMember = async (memberUidToRemove) => {
 
     } catch (err) {
         console.error("Error removing member:", err);
-        toast.success(`${memberUsername} removed.`, { id: removingToast }); // Show error message
+        toast.error(`Failed to remove ${memberUsername}.`, { id: removingToast });
     }
 };
   const handleLeaveRoom = async () => {
@@ -743,14 +743,16 @@ const handleRemoveMember = async (memberUidToRemove) => {
     try {
       if (!isCreator) {
         await updateDoc(roomDocRef, {
-          memberIds: arrayRemove(currentUser.uid),
+          members: arrayRemove(currentUser.uid),
         });
       } else {
         toast.error("Creators cannot leave. Delete room instead.");
         toast.dismiss(leavingToast);
         return;
       }
-      await remove(userStatusRef);
+      if (rtdb) {
+        await remove(userStatusRef);
+      }
       toast.success("Left the room.", { id: leavingToast });
       router.push("/rooms");
     } catch (err) {
