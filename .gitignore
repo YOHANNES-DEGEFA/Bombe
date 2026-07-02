@@ -28,8 +28,3 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
-
-# android
-android-tv/.gradle/
-android-tv/**/build/
-android-tv/local.properties
