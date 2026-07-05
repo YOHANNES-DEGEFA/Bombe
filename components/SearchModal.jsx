@@ -225,7 +225,32 @@ const SearchModal = ({ isOpen, onClose }) => {
       onClose();
     }
   };
-  // const handleResultClick = (item) => { if (item.media_type === 'movie' || item.media_type === 'tv') { router.push(`/${item.media_type}/${item.id}`); onClose(); } else { console.warn("Clicked item with unexpected media type:", item.media_type); } };
+
+  const handleResultClick = (item) => {
+    if (!item?.id) return;
+    const mediaType = item.media_type;
+    if (mediaType !== "movie" && mediaType !== "tv") return;
+
+    const url =
+      mediaType === "tv"
+        ? `/watchTv/${item.id}/1/1`
+        : `/movie/${item.id}`;
+
+    onClose();
+    router.push(url);
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery("");
+      setResults([]);
+      setIsMovie(null);
+      setYear("");
+      setGenre("");
+      setShowTrending(true);
+      debouncedFetch.cancel?.();
+    }
+  }, [isOpen, debouncedFetch]);
 
   // --- Render Logic ---
   if (!isOpen) return null;
@@ -399,7 +424,8 @@ const SearchModal = ({ isOpen, onClose }) => {
                     <MovieCard
                       key={`${item.id}-${item.media_type}`}
                       movie={item}
-                      // onClick={() => handleResultClick(item)}
+                      skipDetailFetch
+                      onClick={handleResultClick}
                     />
                   ))}
                 </div>
@@ -426,7 +452,8 @@ const SearchModal = ({ isOpen, onClose }) => {
                       <MovieCard
                         key={`${item.id}-${item.media_type}`}
                         movie={item}
-                        // onClick={() => handleResultClick(item)}
+                        skipDetailFetch
+                        onClick={handleResultClick}
                       />
                     ))}
                   </div>
