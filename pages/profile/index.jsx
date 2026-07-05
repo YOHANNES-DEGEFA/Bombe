@@ -11,6 +11,7 @@ import { SeoHead } from "../../components/SeoHead";
 import { motion } from "framer-motion";
 import { useProfileData } from "../../hooks/useProfileData";
 import { invalidateCachedUser } from "../../lib/cachedUsers";
+import { invalidateUsersSearchCache } from "../../lib/cachedUsersDirectory";
 // Genre Map (Ensure this covers IDs present in your data, including TV genres)
 const genreMap = {
     28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
@@ -70,6 +71,7 @@ export default function Profile() {
         // Optimistically update local state first for better UX
         setUserData((prev) => ({ ...prev, username: username.trim() }));
         invalidateCachedUser(currentUser.uid);
+        invalidateUsersSearchCache();
         toast.success("Username updated!", { id: savingToast });
         setIsEditing(false);
     } catch(err) {
@@ -91,13 +93,45 @@ export default function Profile() {
      }
   };
 
+  const handleRetryProfile = () => {
+    router.replace(router.asPath);
+  };
+
   if (loading) {
     return <SkeletonProfilePage />;
   }
 
-   if (error) {
-       return ( <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]"> <div className="text-center"> <h2 className="text-2xl text-red-500 mb-4">Error Loading Profile</h2> <p className="text-textsecondary mb-6">{error}</p> </div> </div> );
-    }
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center px-4 min-h-[60vh]">
+        <SeoHead title="Profile" description="Manage your Bombe profile." canonicalPath="/profile" noindex />
+        <Toaster position="bottom-center" toastOptions={{ className: "bg-secondary text-textprimary" }} />
+        <div className="text-center max-w-md">
+          <h2 className="text-2xl text-red-500 mb-4">Error Loading Profile</h2>
+          <p className="text-textsecondary mb-6">{error}</p>
+          <p className="text-textsecondary text-sm mb-6">
+            Your login exists in Firebase Authentication, but your Firestore profile could not be loaded or created. Check Firestore security rules allow creating documents in the users collection.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              type="button"
+              onClick={handleRetryProfile}
+              className="h-[40px] px-4 rounded-md bg-accent text-on-accent hover:bg-accent-hover transition-colors"
+            >
+              Try Again
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="h-[40px] px-4 rounded-md border border-secondary-light bg-transparent hover:bg-secondary-light transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center p-4 md:p-6">

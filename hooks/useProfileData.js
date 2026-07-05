@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./useAuth";
 import { useCachedFirestoreDoc } from "./useCachedFirestoreDoc";
-import { getCachedUser } from "../lib/cachedUsers";
+import { getCachedUser, invalidateCachedUser } from "../lib/cachedUsers";
+import { ensureUserProfile } from "../lib/ensureUserProfile";
 import { CACHE_TTL, getMemoryCached } from "../lib/memoryCache";
 import { getUserFacingMessage, logAppError } from "../lib/userFacingError";
 
@@ -73,7 +74,7 @@ export function useProfileData(genreMap) {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!userId) {
+    if (!userId || !currentUser) {
       setProfileLoading(false);
       return;
     }
@@ -82,30 +83,32 @@ export function useProfileData(genreMap) {
     setProfileLoading(true);
     setError(null);
 
-    getCachedUser(userId)
-      .then((profile) => {
+    (async () => {
+      try {
+        await ensureUserProfile(currentUser);
+        invalidateCachedUser(userId);
+        const profile = await getCachedUser(userId);
         if (!isMounted) return;
         if (!profile) {
           setError("User data not found.");
           return;
         }
         setUserData(profile);
-      })
-      .catch((err) => {
+      } catch (err) {
         logAppError("profile", err);
         if (!isMounted) return;
         setError(
           getUserFacingMessage(err, "We couldn't load your profile. Please try again.")
         );
-      })
-      .finally(() => {
+      } finally {
         if (isMounted) setProfileLoading(false);
-      });
+      }
+    })();
 
     return () => {
       isMounted = false;
     };
-  }, [authLoading, userId]);
+  }, [authLoading, userId, currentUser]);
 
   const stats = useMemo(() => {
     const history = historyData || DEFAULT_HISTORY;

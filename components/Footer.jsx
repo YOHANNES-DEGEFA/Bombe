@@ -40,6 +40,15 @@ const Footer = () => {
             <p className="text-textsecondary/60">All rights reserved.</p>
           </div>
         </div>
+
+        <div className="relative z-10 border-t border-white/[0.06] px-6 py-4 text-center text-xs text-textsecondary/60">
+          Built and maintained with{" "}
+          <span className="text-accent" aria-label="love">
+            ♥
+          </span>{" "}
+          by{" "}
+          <span className="text-textprimary font-medium">Yohannes D.</span>
+        </div>
       </footer>
   );
 };

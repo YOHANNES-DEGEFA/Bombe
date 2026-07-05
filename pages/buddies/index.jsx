@@ -1,5 +1,5 @@
 // pages/buddies.js (or wherever it resides)
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { db } from "../../firebase";
 import { useAuth } from "../../hooks/useAuth";
 import {
@@ -17,7 +17,7 @@ import {
 } from "firebase/firestore";
 import { safeGetDocs } from "../../lib/firestore";
 import { getCachedUser } from "../../lib/cachedUsers";
-import { getCachedUsersDirectory } from "../../lib/cachedUsersDirectory";
+import { searchUsersByUsernamePrefix } from "../../lib/cachedUsersDirectory";
 import { CACHE_TTL, getMemoryCached, setMemoryCached } from "../../lib/memoryCache";
 import { invalidateBuddiesCache } from "../../lib/buddiesCache";
 import { SeoHead } from "../../components/SeoHead";
@@ -160,7 +160,7 @@ const UserListItem = ({
 // --- End UserListItem ---
 
 const BuddiesPage = () => {
-  const { user: currentUser, userId } = useAuth();
+  const { user: currentUser, userId, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const friendsCacheKey = userId ? `buddies:friends:${userId}` : null;
@@ -175,6 +175,9 @@ const BuddiesPage = () => {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const searchGenerationRef = useRef(0);
   const [loading, setLoading] = useState(() => {
     if (!userId) return false;
     const hasFriendsCache = friendsCacheKey && getMemoryCached(friendsCacheKey, CACHE_TTL.firestore);
@@ -290,34 +293,51 @@ const BuddiesPage = () => {
       const trimmedQuery = searchQuery.trim();
       if (!trimmedQuery) {
         setSearchResults([]);
+        setSearchError(null);
+        setIsSearchingUsers(false);
         return;
       }
-      if (!userId) return;
-      const lowerCaseQuery = trimmedQuery.toLowerCase();
+      if (authLoading) return;
+      if (!userId || !currentUser) {
+        setSearchResults([]);
+        setSearchError("Please log in to search for users.");
+        setIsSearchingUsers(false);
+        return;
+      }
+
+      const generation = ++searchGenerationRef.current;
+      setIsSearchingUsers(true);
+      setSearchError(null);
+
       try {
-        const allFetchedUsers = await getCachedUsersDirectory();
-        const filteredResults = allFetchedUsers.filter((user) => {
-          const isCurrentUser = user.uid === userId;
-          const usernameString = user.username || "";
-          const usernameLower =
-            typeof usernameString === "string"
-              ? usernameString.toLowerCase()
-              : "";
-          const matchesQuery = usernameLower.startsWith(lowerCaseQuery);
-          return !isCurrentUser && matchesQuery;
+        const idToken = await currentUser.getIdToken();
+        const filteredResults = await searchUsersByUsernamePrefix(trimmedQuery, {
+          excludeUid: userId,
+          idToken,
         });
+        if (generation !== searchGenerationRef.current) return;
         setSearchResults(filteredResults);
       } catch (error) {
+        if (generation !== searchGenerationRef.current) return;
         console.error(
           "[Search Debug] Error fetching or filtering users:",
           error
         );
         setSearchResults([]);
+        setSearchError(
+          error instanceof Error
+            ? error.message
+            : "Search failed. Check your connection and try again."
+        );
+      } finally {
+        if (generation === searchGenerationRef.current) {
+          setIsSearchingUsers(false);
+        }
       }
     };
     const timerId = setTimeout(searchUsers, 300);
     return () => clearTimeout(timerId);
-  }, [searchQuery, userId]);
+  }, [searchQuery, userId, currentUser, authLoading]);
 
   const setLoadingState = (targetUserId, isLoading) => {
     setInteractionLoading((prev) => ({ ...prev, [targetUserId]: isLoading }));
@@ -487,8 +507,21 @@ const BuddiesPage = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full p-3 mb-6 bg-primary rounded-lg border border-secondary-light text-textprimary placeholder-textsecondary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent" // Updated styles
             />
+            {isSearchingUsers && (
+              <p className="text-textsecondary text-center py-6 italic">
+                Searching...
+              </p>
+            )}
+            {searchError && (
+              <p className="text-accent-error text-center py-6">
+                {searchError}
+              </p>
+            )}
             {/* Display Search Results */}
-            {searchQuery.trim() && searchResults.length === 0 && (
+            {!isSearchingUsers &&
+              !searchError &&
+              searchQuery.trim() &&
+              searchResults.length === 0 && (
               <p className="text-textsecondary text-center py-6 italic">
                 No users found matching "{searchQuery}".
               </p>
