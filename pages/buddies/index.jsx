@@ -17,7 +17,8 @@ import {
 } from "firebase/firestore";
 import { safeGetDocs } from "../../lib/firestore";
 import { getCachedUser } from "../../lib/cachedUsers";
-import { searchUsersByUsernamePrefix } from "../../lib/cachedUsersDirectory";
+import { searchUsersByUsernamePrefix, invalidateUsersSearchCache } from "../../lib/cachedUsersDirectory";
+import { ensureUserProfile } from "../../lib/ensureUserProfile";
 import { CACHE_TTL, getMemoryCached, setMemoryCached } from "../../lib/memoryCache";
 import { invalidateBuddiesCache } from "../../lib/buddiesCache";
 import { SeoHead } from "../../components/SeoHead";
@@ -289,6 +290,19 @@ const BuddiesPage = () => {
   }, [userId, friendsCacheKey, requestsCacheKey, sentCacheKey]);
 
   useEffect(() => {
+    if (activeTab !== "add" || !currentUser || !userId) return;
+
+    (async () => {
+      try {
+        invalidateUsersSearchCache();
+        await ensureUserProfile(currentUser);
+      } catch (error) {
+        console.error("[Buddies] Failed to sync searchable profile:", error);
+      }
+    })();
+  }, [activeTab, currentUser, userId]);
+
+  useEffect(() => {
     const searchUsers = async () => {
       const trimmedQuery = searchQuery.trim();
       if (!trimmedQuery) {
@@ -310,10 +324,8 @@ const BuddiesPage = () => {
       setSearchError(null);
 
       try {
-        const idToken = await currentUser.getIdToken();
         const filteredResults = await searchUsersByUsernamePrefix(trimmedQuery, {
           excludeUid: userId,
-          idToken,
         });
         if (generation !== searchGenerationRef.current) return;
         setSearchResults(filteredResults);
@@ -492,20 +504,28 @@ const BuddiesPage = () => {
           </div>
         );
 
-      case "add":
+      case "add": {
+        const visibleSearchResults = searchResults.filter((user) => {
+          const isFriend = friends.some((friend) => friend.uid === user.uid);
+          const hasIncomingRequest = friendRequests.some(
+            (req) => req.fromUserId === user.uid
+          );
+          return (
+            user.uid !== userId && !isFriend && !hasIncomingRequest
+          );
+        });
+
         return (
           <div>
-            {/* Themed text */}
             <h2 className="text-xl font-semibold mb-4 text-textprimary">
               Add Friends
             </h2>
-            {/* Themed input */}
             <input
               type="text"
               placeholder="Search by username..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full p-3 mb-6 bg-primary rounded-lg border border-secondary-light text-textprimary placeholder-textsecondary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent" // Updated styles
+              className="w-full p-3 mb-6 bg-primary rounded-lg border border-secondary-light text-textprimary placeholder-textsecondary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
             />
             {isSearchingUsers && (
               <p className="text-textsecondary text-center py-6 italic">
@@ -517,41 +537,29 @@ const BuddiesPage = () => {
                 {searchError}
               </p>
             )}
-            {/* Display Search Results */}
             {!isSearchingUsers &&
               !searchError &&
               searchQuery.trim() &&
-              searchResults.length === 0 && (
+              visibleSearchResults.length === 0 && (
               <p className="text-textsecondary text-center py-6 italic">
-                No users found matching "{searchQuery}".
+                {searchResults.length > 0
+                  ? `Found ${searchResults.length} match(es), but none can be added right now (already friends or pending).`
+                  : `No users found matching "${searchQuery}".`}
               </p>
             )}
-            {searchResults.length > 0 && (
+            {visibleSearchResults.length > 0 && (
               <div className="space-y-2">
-                {" "}
-                {/* Reduced space slightly */}
-                {searchResults.map((user) => {
-                  const isFriend = friends.some(
-                    (friend) => friend.uid === user.uid
-                  );
-                  const hasIncomingRequest = friendRequests.some(
-                    (req) => req.fromUserId === user.uid
-                  );
-                  // Exclude self, friends, and those with pending incoming requests
-                  if (user.uid === userId || isFriend || hasIncomingRequest)
-                    return null;
-                  return (
-                    <UserListItem
-                      key={user.uid}
-                      user={user}
-                      type="search"
-                      onAddFriend={handleSendFriendRequest}
-                      onCancelRequest={handleCancelFriendRequest}
-                      isRequestSent={!!sentRequests[user.uid]}
-                      isLoading={interactionLoading[user.uid]}
-                    />
-                  );
-                })}
+                {visibleSearchResults.map((user) => (
+                  <UserListItem
+                    key={user.uid}
+                    user={user}
+                    type="search"
+                    onAddFriend={handleSendFriendRequest}
+                    onCancelRequest={handleCancelFriendRequest}
+                    isRequestSent={!!sentRequests[user.uid]}
+                    isLoading={interactionLoading[user.uid]}
+                  />
+                ))}
               </div>
             )}
             {!searchQuery.trim() && (
@@ -561,6 +569,7 @@ const BuddiesPage = () => {
             )}
           </div>
         );
+      }
 
       case "friends": // Default tab
       default:

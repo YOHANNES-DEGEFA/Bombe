@@ -1,7 +1,13 @@
 import {
   buildUsernamePrefixQuery,
-  parseFirestoreDocument,
+  buildUsersListQuery,
+  entriesToUsers,
+  matchesUsernamePrefix,
+  normalizeUserForSearch,
+  runFirestoreStructuredQuery,
 } from "../../../lib/firestoreRest";
+
+const FALLBACK_SCAN_LIMIT = 500;
 
 export default async function handler(req, res) {
   res.setHeader(
@@ -40,51 +46,51 @@ export default async function handler(req, res) {
   );
 
   try {
-    const response = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(buildUsernamePrefixQuery(queryText, maxResults)),
-      }
-    );
+    let matchedUsers = [];
 
-    const payload = await response.json();
-
-    if (!response.ok) {
-      console.error("[UserSearch API] Firestore error:", payload);
-      const firestoreMessage = payload?.error?.message || "";
-      const isPermissionDenied =
-        response.status === 403 ||
-        firestoreMessage.toLowerCase().includes("permission");
-
-      res.status(response.status).json({
-        error: isPermissionDenied
-          ? "Firestore blocked user search. Update security rules for the users collection."
-          : firestoreMessage || "Search failed.",
-      });
-      return;
+    try {
+      const prefixEntries = await runFirestoreStructuredQuery(
+        projectId,
+        idToken,
+        buildUsernamePrefixQuery(queryText, maxResults)
+      );
+      matchedUsers = entriesToUsers(prefixEntries).filter((user) =>
+        matchesUsernamePrefix(user, queryText)
+      );
+    } catch (prefixError) {
+      console.warn(
+        "[UserSearch API] Prefix query failed, using fallback scan:",
+        prefixError.message
+      );
     }
 
-    const lowerCaseQuery = queryText.toLowerCase();
-    const users = (Array.isArray(payload) ? payload : [])
-      .map(parseFirestoreDocument)
-      .filter((user) => user.uid && user.username)
-      .filter((user) => {
-        const usernameLower = (
-          user.username_lowercase ||
-          user.username ||
-          ""
-        ).toLowerCase();
-        return usernameLower.startsWith(lowerCaseQuery);
-      });
+    if (matchedUsers.length === 0) {
+      const listEntries = await runFirestoreStructuredQuery(
+        projectId,
+        idToken,
+        buildUsersListQuery(FALLBACK_SCAN_LIMIT)
+      );
+      matchedUsers = entriesToUsers(listEntries).filter((user) =>
+        matchesUsernamePrefix(user, queryText)
+      );
+    }
+
+    const users = matchedUsers
+      .slice(0, maxResults)
+      .map(normalizeUserForSearch)
+      .filter((user) => user.username_lowercase);
 
     res.status(200).json({ users });
   } catch (error) {
     console.error("[UserSearch API] Unexpected error:", error);
-    res.status(500).json({ error: "Search failed." });
+    const isPermissionDenied =
+      error.status === 403 ||
+      String(error.message || "").toLowerCase().includes("permission");
+
+    res.status(error.status || 500).json({
+      error: isPermissionDenied
+        ? "Firestore blocked user search. Update security rules for the users collection."
+        : error.message || "Search failed.",
+    });
   }
 }
