@@ -56,7 +56,7 @@ export default function Home() {
       </div>
       <div className="absolute inset-0 z-10 bg-gradient-to-br from-primary via-primary/80 to-primary" />
 
-      <div className="relative z-20 flex items-center justify-center h-full p-4">
+      <div className="relative z-20 flex flex-col items-center justify-center h-full p-4 gap-5">
         <AnimatePresence mode="wait">
           <motion.div
             key={isSignUp ? "signup" : "signin"}
@@ -73,6 +73,15 @@ export default function Home() {
             )}
           </motion.div>
         </AnimatePresence>
+
+        <a
+          href="https://yohannes-degefa.vercel.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-textsecondary/70 hover:text-accent transition-colors tracking-wide"
+        >
+          Learn more about the developer
+        </a>
       </div>
     </div>
   );
