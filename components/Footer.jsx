@@ -42,11 +42,11 @@ const Footer = () => {
               href={PORTFOLIO_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-accent hover:text-accent-hover transition-colors font-medium group"
+              className="developer-cta-attention group inline-flex h-10 items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 text-sm font-medium text-accent transition-all duration-200 hover:border-accent hover:bg-accent hover:text-on-accent"
             >
-              Learn more about the developer
+              <span className="relative z-10">Explore my portfolio</span>
               <FiArrowUpRight
-                className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                className="relative z-10 h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
                 aria-hidden
               />
             </a>

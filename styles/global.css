@@ -11,6 +11,8 @@
     --color-elevated: theme(colors.elevated);
     --color-hover-surface: theme(colors.hover-surface);
     --color-border-strong: theme(colors.border-strong);
+    --color-accent: theme(colors.accent);
+    --color-textprimary: theme(colors.textprimary);
     --color-textsecondary: theme(colors.textsecondary);
 
     --skeleton-base: var(--color-secondary);
@@ -158,6 +160,51 @@ input[type=number] {
     @apply text-[11px] uppercase tracking-[0.2em] font-medium text-textsecondary;
   }
 
+  .developer-cta-attention {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    animation: developer-cta-glow 7s ease-in-out infinite;
+  }
+
+  .developer-cta-attention::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      color-mix(in srgb, var(--color-textprimary) 28%, transparent) 50%,
+      transparent 65%
+    );
+    transform: translateX(-140%);
+    animation: developer-cta-sweep 7s ease-in-out infinite;
+  }
+
+  @keyframes developer-cta-glow {
+    0%,
+    68%,
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+    76% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 16%, transparent),
+        0 0 20px color-mix(in srgb, var(--color-accent) 22%, transparent);
+    }
+  }
+
+  @keyframes developer-cta-sweep {
+    0%,
+    68% {
+      transform: translateX(-140%);
+    }
+    82%,
+    100% {
+      transform: translateX(140%);
+    }
+  }
+
   .skeleton {
     background-color: var(--skeleton-base);
     border: 1px solid transparent;
@@ -200,6 +247,11 @@ input[type=number] {
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .developer-cta-attention,
+    .developer-cta-attention::before {
+      animation: none;
+    }
+
     .skeleton-shimmer::after {
       animation: none;
       opacity: 0;
