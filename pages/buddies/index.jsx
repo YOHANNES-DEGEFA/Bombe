@@ -1,5 +1,5 @@
 // pages/buddies.js (or wherever it resides)
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { db } from "../../firebase";
 import { useAuth } from "../../hooks/useAuth";
 import {
@@ -17,7 +17,8 @@ import {
 } from "firebase/firestore";
 import { safeGetDocs } from "../../lib/firestore";
 import { getCachedUser } from "../../lib/cachedUsers";
-import { getCachedUsersDirectory } from "../../lib/cachedUsersDirectory";
+import { searchUsersByUsernamePrefix, invalidateUsersSearchCache } from "../../lib/cachedUsersDirectory";
+import { ensureUserProfile } from "../../lib/ensureUserProfile";
 import { CACHE_TTL, getMemoryCached, setMemoryCached } from "../../lib/memoryCache";
 import { invalidateBuddiesCache } from "../../lib/buddiesCache";
 import { SeoHead } from "../../components/SeoHead";
@@ -160,7 +161,7 @@ const UserListItem = ({
 // --- End UserListItem ---
 
 const BuddiesPage = () => {
-  const { user: currentUser, userId } = useAuth();
+  const { user: currentUser, userId, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const friendsCacheKey = userId ? `buddies:friends:${userId}` : null;
@@ -175,6 +176,9 @@ const BuddiesPage = () => {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const searchGenerationRef = useRef(0);
   const [loading, setLoading] = useState(() => {
     if (!userId) return false;
     const hasFriendsCache = friendsCacheKey && getMemoryCached(friendsCacheKey, CACHE_TTL.firestore);
@@ -286,38 +290,66 @@ const BuddiesPage = () => {
   }, [userId, friendsCacheKey, requestsCacheKey, sentCacheKey]);
 
   useEffect(() => {
+    if (activeTab !== "add" || !currentUser || !userId) return;
+
+    (async () => {
+      try {
+        invalidateUsersSearchCache();
+        await ensureUserProfile(currentUser);
+      } catch (error) {
+        console.error("[Buddies] Failed to sync searchable profile:", error);
+      }
+    })();
+  }, [activeTab, currentUser, userId]);
+
+  useEffect(() => {
     const searchUsers = async () => {
       const trimmedQuery = searchQuery.trim();
       if (!trimmedQuery) {
         setSearchResults([]);
+        setSearchError(null);
+        setIsSearchingUsers(false);
         return;
       }
-      if (!userId) return;
-      const lowerCaseQuery = trimmedQuery.toLowerCase();
+      if (authLoading) return;
+      if (!userId || !currentUser) {
+        setSearchResults([]);
+        setSearchError("Please log in to search for users.");
+        setIsSearchingUsers(false);
+        return;
+      }
+
+      const generation = ++searchGenerationRef.current;
+      setIsSearchingUsers(true);
+      setSearchError(null);
+
       try {
-        const allFetchedUsers = await getCachedUsersDirectory();
-        const filteredResults = allFetchedUsers.filter((user) => {
-          const isCurrentUser = user.uid === userId;
-          const usernameString = user.username || "";
-          const usernameLower =
-            typeof usernameString === "string"
-              ? usernameString.toLowerCase()
-              : "";
-          const matchesQuery = usernameLower.startsWith(lowerCaseQuery);
-          return !isCurrentUser && matchesQuery;
+        const filteredResults = await searchUsersByUsernamePrefix(trimmedQuery, {
+          excludeUid: userId,
         });
+        if (generation !== searchGenerationRef.current) return;
         setSearchResults(filteredResults);
       } catch (error) {
+        if (generation !== searchGenerationRef.current) return;
         console.error(
           "[Search Debug] Error fetching or filtering users:",
           error
         );
         setSearchResults([]);
+        setSearchError(
+          error instanceof Error
+            ? error.message
+            : "Search failed. Check your connection and try again."
+        );
+      } finally {
+        if (generation === searchGenerationRef.current) {
+          setIsSearchingUsers(false);
+        }
       }
     };
     const timerId = setTimeout(searchUsers, 300);
     return () => clearTimeout(timerId);
-  }, [searchQuery, userId]);
+  }, [searchQuery, userId, currentUser, authLoading]);
 
   const setLoadingState = (targetUserId, isLoading) => {
     setInteractionLoading((prev) => ({ ...prev, [targetUserId]: isLoading }));
@@ -472,53 +504,62 @@ const BuddiesPage = () => {
           </div>
         );
 
-      case "add":
+      case "add": {
+        const visibleSearchResults = searchResults.filter((user) => {
+          const isFriend = friends.some((friend) => friend.uid === user.uid);
+          const hasIncomingRequest = friendRequests.some(
+            (req) => req.fromUserId === user.uid
+          );
+          return (
+            user.uid !== userId && !isFriend && !hasIncomingRequest
+          );
+        });
+
         return (
           <div>
-            {/* Themed text */}
             <h2 className="text-xl font-semibold mb-4 text-textprimary">
               Add Friends
             </h2>
-            {/* Themed input */}
             <input
               type="text"
               placeholder="Search by username..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full p-3 mb-6 bg-primary rounded-lg border border-secondary-light text-textprimary placeholder-textsecondary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent" // Updated styles
+              className="w-full p-3 mb-6 bg-primary rounded-lg border border-secondary-light text-textprimary placeholder-textsecondary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
             />
-            {/* Display Search Results */}
-            {searchQuery.trim() && searchResults.length === 0 && (
+            {isSearchingUsers && (
               <p className="text-textsecondary text-center py-6 italic">
-                No users found matching "{searchQuery}".
+                Searching...
               </p>
             )}
-            {searchResults.length > 0 && (
+            {searchError && (
+              <p className="text-accent-error text-center py-6">
+                {searchError}
+              </p>
+            )}
+            {!isSearchingUsers &&
+              !searchError &&
+              searchQuery.trim() &&
+              visibleSearchResults.length === 0 && (
+              <p className="text-textsecondary text-center py-6 italic">
+                {searchResults.length > 0
+                  ? `Found ${searchResults.length} match(es), but none can be added right now (already friends or pending).`
+                  : `No users found matching "${searchQuery}".`}
+              </p>
+            )}
+            {visibleSearchResults.length > 0 && (
               <div className="space-y-2">
-                {" "}
-                {/* Reduced space slightly */}
-                {searchResults.map((user) => {
-                  const isFriend = friends.some(
-                    (friend) => friend.uid === user.uid
-                  );
-                  const hasIncomingRequest = friendRequests.some(
-                    (req) => req.fromUserId === user.uid
-                  );
-                  // Exclude self, friends, and those with pending incoming requests
-                  if (user.uid === userId || isFriend || hasIncomingRequest)
-                    return null;
-                  return (
-                    <UserListItem
-                      key={user.uid}
-                      user={user}
-                      type="search"
-                      onAddFriend={handleSendFriendRequest}
-                      onCancelRequest={handleCancelFriendRequest}
-                      isRequestSent={!!sentRequests[user.uid]}
-                      isLoading={interactionLoading[user.uid]}
-                    />
-                  );
-                })}
+                {visibleSearchResults.map((user) => (
+                  <UserListItem
+                    key={user.uid}
+                    user={user}
+                    type="search"
+                    onAddFriend={handleSendFriendRequest}
+                    onCancelRequest={handleCancelFriendRequest}
+                    isRequestSent={!!sentRequests[user.uid]}
+                    isLoading={interactionLoading[user.uid]}
+                  />
+                ))}
               </div>
             )}
             {!searchQuery.trim() && (
@@ -528,6 +569,7 @@ const BuddiesPage = () => {
             )}
           </div>
         );
+      }
 
       case "friends": // Default tab
       default:

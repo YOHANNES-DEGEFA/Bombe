@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
 import { prefetchUserTabData } from "../lib/prefetchUserData";
+import { ensureUserProfile } from "../lib/ensureUserProfile";
 
 const AuthContext = createContext(null);
 
@@ -13,7 +14,11 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+
       if (currentUser?.uid) {
+        ensureUserProfile(currentUser).catch((error) => {
+          console.error("[Auth] Failed to ensure Firestore user profile:", error);
+        });
         prefetchUserTabData(currentUser.uid);
       }
     });

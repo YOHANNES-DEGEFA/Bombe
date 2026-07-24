@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Profiles: any signed-in user can read (buddy search + friend lists).
+    // Only the account owner can create or edit their profile.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    // Friend lists: readable by signed-in users.
+    // Any signed-in user may update lists (needed when accepting requests / unfriending).
+    match /friends/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isSignedIn();
+      allow delete: if isOwner(userId);
+    }
+
+    match /friendRequests/{requestId} {
+      allow read: if isSignedIn()
+        && (resource.data.fromUserId == request.auth.uid
+            || resource.data.toUserId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.fromUserId == request.auth.uid
+        && request.resource.data.toUserId != request.auth.uid
+        && request.resource.data.status == "pending";
+      allow update, delete: if isSignedIn()
+        && (resource.data.fromUserId == request.auth.uid
+            || resource.data.toUserId == request.auth.uid);
+    }
+
+    match /favorites/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /history/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /watchlists/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /ratings/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Friends can send recommendations into another user's inbox.
+    match /recommendations/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isSignedIn();
+      allow delete: if isOwner(userId);
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn()
+        && (resource.data.createdBy == request.auth.uid
+            || request.auth.uid in resource.data.members);
+      allow delete: if isSignedIn()
+        && resource.data.createdBy == request.auth.uid;
+    }
+  }
+}
